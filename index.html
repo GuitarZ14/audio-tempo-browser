@@ -75,7 +75,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="tx" id="utx">点击选择音频文件</div>
 <div class="nt" id="unt">支持 MP3 / WAV / M4A</div>
 <div class="fi" id="fi" style="display:none">
-<div class="ap-pb" id="upb" onclick="event.stopPropagation();upbSeek(event)" style="margin-top:0"><div class="ap-pb-in" id="upi"></div><div id="upthumb"></div></div>
+ <div class="ap-pb" id="upb" style="margin-top:0"><div class="ap-pb-in" id="upi"></div><div id="upthumb"></div></div>
 <div style="display:flex;align-items:center;gap:8px;margin-top:4px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:3px 8px;border-radius:12px;font-size:12px">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:3px 10px;border-radius:12px;font-size:11px">更换</button></div>
 <div style="font-size:11px;color:#888;margin-top:2px;display:flex;align-items:center;justify-content:space-between"><span id="bpmn"></span><span style="display:flex;align-items:center;gap:4px"><button id="ci-btn" onclick="event.stopPropagation();toggleCountIn()" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 6px;border-radius:6px;opacity:.35;transition:all .2s" title="开启预备拍">⏲</button><span style="font-size:10px;color:#888;user-select:none">开启预备拍</span></span></div>
 </div>
@@ -172,7 +172,7 @@ function stopProgTimer() { if (progTimer) { clearInterval(progTimer); progTimer 
 function startProgTimer() {
   if (progTimer) return
   progTimer = setInterval(() => {
-    let op = $('op'), dur = op.duration || 0, cur = 0
+    let op = $('op'), dur = op.duration && isFinite(op.duration) && op.duration > 0 ? op.duration : (audioBuf ? audioBuf.duration / audioBuf.sampleRate : 0), cur = 0
     if (previewSrc) cur = Math.max(0, (actx ? actx.currentTime : 0) - pStartTime)
     else if (vPreviewSrc) cur = Math.max(0, (actx ? actx.currentTime : 0) - vStartTime)
     else cur = op.currentTime
@@ -391,16 +391,18 @@ $('ap').addEventListener('ended', () => {
 })
 
 let opDrag = false, opDragSeeked = false
-$('upb').addEventListener('mousedown', e => { opDrag = true; opDragSeeked = false; $('upb').classList.add('dragging'); upbSeek(e); updateProgDisplay() })
+$('upb').addEventListener('mousedown', e => { e.stopPropagation(); opDrag = true; opDragSeeked = false; $('upb').classList.add('dragging'); upbSeek(e); updateProgDisplay() })
 document.addEventListener('mousemove', e => { if (opDrag) { e.preventDefault(); upbSeek(e); updateProgDisplay(); opDragSeeked = true } })
 document.addEventListener('mouseup', () => { if (opDrag && opDragSeeked && $('upb-btn').textContent === '⏸' && (previewSrc || vPreviewSrc)) { if (previewSrc) { stopPreview(); genPreview() } else { stopVPreview(); genVPreview() } }; $('upb').classList.remove('dragging'); opDrag = false })
-$('upb').addEventListener('touchstart', e => { opDrag = true; opDragSeeked = false; $('upb').classList.add('dragging'); upbSeek(e.touches[0]); updateProgDisplay() })
+$('upb').addEventListener('touchstart', e => { e.stopPropagation(); opDrag = true; opDragSeeked = false; $('upb').classList.add('dragging'); upbSeek(e.touches[0]); updateProgDisplay() })
 document.addEventListener('touchmove', e => { if (opDrag) { e.preventDefault(); upbSeek(e.touches[0]); updateProgDisplay(); opDragSeeked = true } })
 document.addEventListener('touchend', () => { if (opDrag && opDragSeeked && $('upb-btn').textContent === '⏸' && (previewSrc || vPreviewSrc)) { if (previewSrc) { stopPreview(); genPreview() } else { stopVPreview(); genVPreview() } }; $('upb').classList.remove('dragging'); opDrag = false })
 function upbSeek(e) {
-  let op = $('op'); if (!op.duration) return
-  let rect = $('upb').getBoundingClientRect()
-  op.currentTime = ((e.clientX - rect.left) / rect.width) * op.duration
+  let op = $('op'), dur = op.duration
+  if (!dur || !isFinite(dur) || dur <= 0) { dur = audioBuf ? audioBuf.duration / audioBuf.sampleRate : 0 }
+  if (!dur || dur <= 0) return
+  let rect = $('upb').getBoundingClientRect(), x = ('touches' in e ? e.touches[0] : e).clientX
+  op.currentTime = Math.max(0, Math.min(dur, ((x - rect.left) / rect.width) * dur))
 }
 function updateProgDisplay() {
   let op = $('op')
