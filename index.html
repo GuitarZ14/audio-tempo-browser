@@ -38,6 +38,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .er{background:rgba(255,60,60,.1);border:1px solid rgba(255,60,60,.3);color:#ff6b6b;padding:12px;border-radius:8px;font-size:14px;margin-bottom:16px;display:none}
 .fn{display:none;padding:12px;background:rgba(78,205,196,.1);border-radius:8px;font-size:14px;color:#4ecdc4;text-align:center;margin-top:12px}
 .fn.sh{display:block}
+.bpmi{display:none;padding:8px 12px;font-size:13px;color:#aaa;text-align:center}
+.bpmi.sh{display:block}
+.ap-w{display:none;margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.08)}
+.ap-w.sh{display:block}
+.ap-pb{width:100%;height:8px;background:rgba(255,255,255,.1);border-radius:4px;cursor:pointer;position:relative}
+.ap-pb-in{height:100%;background:linear-gradient(90deg,#4ecdc4,#44b09e);border-radius:4px;width:0;pointer-events:none}
+.ap-tm{text-align:right;color:#888;font-size:12px;margin-top:4px}
 </style>
 </head>
 <body>
@@ -55,6 +62,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </div>
 <input type="file" id="gi" accept=".mp3,.wav,.m4a,.aac,.ogg" hidden>
 <div class="fn" id="fn"></div>
+<div class="bpmi" id="bpmi"></div>
 </div>
 <div class="card">
 <span style="font-size:14px;color:#aaa">目标速度（BPM）</span>
@@ -63,21 +71,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </div>
 <button class="bn" id="go">🎧 生成伴奏</button>
 <div class="st" id="st"><p id="stx">处理中...</p><div class="pb"><div class="pb-bar" id="pbb"></div></div></div>
-<div class="card ra" id="ra"><div id="rl"></div></div>
+<div class="card ra" id="ra"><div id="rl"></div><div class="ap-w" id="apw"><div class="ap-pb" id="appb" onclick="sk(event)"><div class="ap-pb-in" id="appi"></div></div><div class="ap-tm" id="aptm">0:00 / 0:00</div></div></div>
 <div class="ft">每段音频自动添加 4 拍预备拍</div>
 </div>
 <audio id="ap" style="display:none"></audio>
 <script>
-let actx, file, obpm = 120, bn = ''
+let actx, file, obpm = 120, bn = '', audioBuf = null
 let $ = id => document.getElementById(id)
 
-$('gi').onchange = e => {
+$('gi').onchange = async e => {
   let f = e.target.files[0]
   if (!f) return
   if (f.size > 100e6) { err('文件过大（限 100MB）'); return }
   file = f; bn = f.name.replace(/\.[^.]+$/, '')
   $('fn').textContent = '✅ ' + f.name; $('fn').classList.add('sh')
-  hideErr()
+  $('bpmi').classList.remove('sh')
+  hideErr(); audioBuf = null
+  try {
+    let ctx = new (window.AudioContext || window.webkitAudioContext)()
+    audioBuf = await ctx.decodeAudioData(await f.arrayBuffer())
+    ctx.close()
+    let bpm = detectBpm(audioBuf)
+    if (bpm) { obpm = bpm; $('bpmi').textContent = '⏱ 原始速度: ' + obpm + ' BPM'; $('bpmi').classList.add('sh') }
+  } catch(e) {}
 }
 
 $('go').onclick = async () => {
@@ -89,28 +105,10 @@ $('go').onclick = async () => {
 
   try {
     actx = new (window.AudioContext || window.webkitAudioContext)()
-    let buf = await actx.decodeAudioData(await file.arrayBuffer()); pb(5)
+    let buf = audioBuf
+    if (!buf) buf = await actx.decodeAudioData(await file.arrayBuffer())
+    pb(5)
     let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
-    let peaks = [], win = Math.floor(sr * 0.1), th = 0
-    for (let c = 0; c < ch; c++) {
-      let d = buf.getChannelData(c)
-      for (let i = win; i < ln; i += win) {
-        let e = 0; for (let j = 0; j < win; j++) e += Math.abs(d[i + j]); e /= win
-        if (i > win * 2) { let r = e / (th + 0.001); if (r > 2.5) peaks.push(i) }
-        th = th * 0.9 + e * 0.1
-      }
-    }
-    if (peaks.length > 4) {
-      let ints = []
-      for (let i = 1; i < peaks.length; i++) ints.push(peaks[i] - peaks[i-1])
-      if (ints.length > 3) {
-        ints.sort((a, b) => a - b)
-        let mid = ints[Math.floor(ints.length / 2)]
-        let est = Math.round(60 / (mid / sr))
-        if (est > 40 && est < 200) obpm = est
-      }
-    }
-
     stx('原始 BPM：' + obpm); pb(10)
 
     for (let i = 0; i < tgts.length; i++) {
@@ -137,7 +135,7 @@ $('go').onclick = async () => {
       let wav = toWav(fin)
       let url = URL.createObjectURL(new Blob([wav], {type:'audio/wav'}))
       let d = document.createElement('div'); d.className = 'ri'
-      d.innerHTML = `<div><div class="bl">${t} BPM</div><div style="font-size:12px;color:#888">${bn}_${t}bpm.wav</div></div><div class="ac"><button class="pb2" onclick="tp('${url}',this)">▶ 播放</button><a class="db" href="${url}" download="${bn}_${t}bpm.wav">下载</a></div>`
+      d.innerHTML = `<div><div class="bl">${t} BPM</div><div style="font-size:12px;color:#888">${bn}_${t}bpm.wav</div></div><div class="ac"><button class="pb2" data-url="${url}" onclick="tp(this)">▶ 播放</button><a class="db" href="${url}" download="${bn}_${t}bpm.wav">下载</a></div>`
       $('rl').appendChild(d); $('ra').classList.add('sh')
     }
     stx('✅ 完成！'); pb(100)
@@ -145,15 +143,58 @@ $('go').onclick = async () => {
   $('go').disabled = false
 }
 
-function tp(url, btn) {
-  let ap = $('ap')
-  if (ap.src === url && !ap.paused) { ap.pause(); btn.textContent = '▶ 播放' }
-  else if (ap.src === url && ap.paused) { ap.play(); btn.textContent = '⏸ 暂停' }
+function tp(btn) {
+  let ap = $('ap'), url = btn.dataset.url
+  if (ap.src === url && !ap.paused) { ap.pause(); btn.textContent = '▶ 播放'; $('apw').classList.remove('sh') }
+  else if (ap.src === url && ap.paused) { ap.play(); btn.textContent = '⏸ 暂停'; $('apw').classList.add('sh') }
   else {
+    $('apw').classList.add('sh')
     ap.src = url; ap.play(); btn.textContent = '⏸ 暂停'
     document.querySelectorAll('#rl .pb2').forEach(b => { if (b !== btn) b.textContent = '▶ 播放' })
   }
 }
+
+function detectBpm(buf) {
+  let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
+  let peaks = [], win = Math.floor(sr * 0.1), th = 0
+  for (let c = 0; c < ch; c++) {
+    let d = buf.getChannelData(c)
+    for (let i = win; i < ln; i += win) {
+      let e = 0; for (let j = 0; j < win; j++) e += Math.abs(d[i + j]); e /= win
+      if (i > win * 2) { let r = e / (th + 0.001); if (r > 2.5) peaks.push(i) }
+      th = th * 0.9 + e * 0.1
+    }
+  }
+  if (peaks.length > 4) {
+    let ints = []
+    for (let i = 1; i < peaks.length; i++) ints.push(peaks[i] - peaks[i-1])
+    if (ints.length > 3) {
+      ints.sort((a, b) => a - b)
+      let mid = ints[Math.floor(ints.length / 2)]
+      let est = Math.round(60 / (mid / sr))
+      if (est > 40 && est < 200) return est
+    }
+  }
+  return null
+}
+
+function fmt(s) { let m = Math.floor(s / 60), se = Math.floor(s % 60); return m + ':' + (se < 10 ? '0' : '') + se }
+
+function sk(e) {
+  let ap = $('ap')
+  if (!ap.duration) return
+  let rect = e.currentTarget.getBoundingClientRect()
+  ap.currentTime = ((e.clientX - rect.left) / rect.width) * ap.duration
+}
+
+$('ap').addEventListener('timeupdate', () => {
+  let ap = $('ap'), pi = $('appi'), tm = $('aptm')
+  if (ap.duration) { pi.style.width = (ap.currentTime / ap.duration * 100) + '%'; tm.textContent = fmt(ap.currentTime) + ' / ' + fmt(ap.duration) }
+})
+$('ap').addEventListener('ended', () => {
+  $('apw').classList.remove('sh')
+  document.querySelectorAll('#rl .pb2').forEach(b => b.textContent = '▶ 播放')
+})
 
 function timeStretch(buf, sFactor) {
   let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
