@@ -97,7 +97,7 @@ $('goBtn').onclick = async () => {
 
   try {
     actx = new AUDIO()
-    let buf = await actx.decodeAudioData(await f.arrayBuffer())
+    let buf = await actx.decodeAudioData(await file.arrayBuffer())
     setP(5)
 
     let sr = buf.sampleRate
