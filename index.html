@@ -65,13 +65,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </div>
 <div class="er" id="er"></div>
 <div class="card">
-<div class="ul" onclick="gi.click()">
+<div class="ul" id="ul">
 <div class="ic" id="uic">📁</div>
 <div class="tx" id="utx">点击选择音频文件</div>
 <div class="nt" id="unt">支持 MP3 / WAV / M4A</div>
-<div class="fi" id="fi" style="display:none" onclick="event.stopPropagation()">
+<div class="fi" id="fi" style="display:none">
 <div class="ap-pb" id="upb" onclick="event.stopPropagation();upbSeek(event)" style="margin-top:8px"><div class="ap-pb-in" id="upi"></div></div>
-<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><button id="upb-btn" class="pb2" onclick="event.stopPropagation();opPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px">0:00 / 0:00</span></div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><button id="upb-btn" class="pb2" onclick="event.stopPropagation();opPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:3px 10px;border-radius:12px;font-size:11px">更换</button></div>
 <div style="font-size:11px;color:#888;margin-top:2px;text-align:left" id="bpmn"></div>
 </div>
 </div>
@@ -149,6 +149,7 @@ $('gi').onchange = e => { let f = e.target.files[0]; if (f) processFile(f) }
   ul.addEventListener('dragleave', () => { ul.style.borderColor = '' })
   ul.addEventListener('drop', e => { e.preventDefault(); ul.style.borderColor = ''; let f = e.dataTransfer.files[0]; if (f) processFile(f) })
 })(document.querySelector('.ul'))
+document.querySelectorAll('#uic,#utx,#unt').forEach(el => el.addEventListener('click', () => { if (!$('fi').style.display || $('fi').style.display === 'none') $('gi').click() }))
 let previewSrc = null; let previewTimer = null; let previewVer = 0; let pStartTime = 0
 $('pct').oninput = () => {
   let v = parseInt($('pct').value); $('pctv').textContent = v + '%'
