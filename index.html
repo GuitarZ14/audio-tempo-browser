@@ -137,14 +137,12 @@ function updateSliderDots() {
   let tw = 20 // thumb width
   let pct = $('pct'), bps = $('bps')
   let pw = pct.offsetWidth, bw = bps.offsetWidth
-  let dots = []
-  for (let v = 30; v <= 150; v += 10) {
-    let f = (v - 30) / 120, px = 10 + (pw - tw) * f
-    dots.push('radial-gradient(circle at ' + px + 'px 50%,#94a3b8 2.5px,transparent 2.5px)')
+  if (pw) {
+    let f = (100 - 30) / 120, px = 10 + (pw - tw) * f
+    pct.style.backgroundImage = 'radial-gradient(circle at ' + px + 'px 50%,#94a3b8 2.5px,transparent 2.5px)'; pct.style.backgroundRepeat = 'no-repeat'
   }
-  pct.style.backgroundImage = dots.join(','); pct.style.backgroundRepeat = 'no-repeat'
   if (obpm && bw) {
-    let mid = Math.round(obpm / 2), f = (mid - 20) / (obpm - 20), px = 10 + (bw - tw) * f
+    let mid = Math.round((20 + obpm) / 2), f = (mid - 20) / (obpm - 20), px = 10 + (bw - tw) * f
     bps.style.backgroundImage = 'radial-gradient(circle at ' + px + 'px 50%,#94a3b8 2.5px,transparent 2.5px)'; bps.style.backgroundRepeat = 'no-repeat'
   }
 }
