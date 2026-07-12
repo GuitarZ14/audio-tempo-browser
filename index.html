@@ -161,30 +161,35 @@ function tp(btn) {
 }
 
 function detectBpm(buf) {
-  let sr = buf.sampleRate, d = buf.getChannelData(0)
-  let hop = Math.floor(sr * 0.01), win = Math.floor(sr * 0.02)
-  let onset = [], prev = 0
-  for (let i = 0; i + win < d.length; i += hop) {
-    let e = 0; for (let j = 0; j < win; j++) e += d[i + j] * d[i + j]
-    e = Math.sqrt(e / win); onset.push(Math.max(0, e - prev)); prev = e
+  let sr = buf.sampleRate, d = buf.getChannelData(0), hop = Math.floor(sr * 0.01)
+  let env = []
+  for (let i = 0; i < d.length; i += hop) {
+    let e = 0, n = 0, lim = Math.min(hop, d.length - i)
+    for (let j = 0; j < lim; j++) e += d[i + j] * d[i + j]
+    env.push(Math.sqrt(e / lim))
   }
-  if (onset.length < 50) return null
+  let avg = 0; for (let v of env) avg += v; avg /= env.length
+  for (let i = 0; i < env.length; i++) env[i] -= avg
+  if (env.length < 50) return null
   let minL = Math.round(60 / 300 * sr / hop), maxL = Math.round(60 / 40 * sr / hop)
   let bestL = minL, bestS = 0
   for (let lag = minL; lag <= maxL; lag++) {
     let s = 0, n = 0
-    for (let i = 0; i + lag < onset.length; i++) { s += onset[i] * onset[i + lag]; n++ }
+    for (let i = 0; i + lag < env.length; i++) { s += env[i] * env[i + lag]; n++ }
     s = n > 0 ? s / n : 0
     if (s > bestS) { bestS = s; bestL = lag }
   }
   let bpm = Math.round(60 / (bestL * hop / sr))
-  let halfL = Math.round(bestL / 2)
-  if (halfL >= minL) {
-    let s2 = 0, n2 = 0
-    for (let i = 0; i + halfL < onset.length; i++) { s2 += onset[i] * onset[i + halfL]; n2++ }
-    if (n2 > 0 && s2 / n2 > bestS * 0.7) bpm *= 2
+  let checks = [[0.5, 2], [2/3, 3/2], [1/3, 3], [2, 0.5]]
+  for (let [div, mul] of checks) {
+    let cl = Math.round(bestL * div)
+    if (cl < minL || cl > maxL) continue
+    let s = 0, n = 0
+    for (let i = 0; i + cl < env.length; i++) { s += env[i] * env[i + cl]; n++ }
+    s = n > 0 ? s / n : 0
+    if (s > bestS * 0.55) { let nb = Math.round(bpm * mul); if (nb >= 40 && nb <= 200) { bpm = nb; break } }
   }
-  return (bpm > 40 && bpm < 200) ? bpm : null
+  return (bpm >= 40 && bpm <= 200) ? bpm : null
 }
 
 function detectSig(buf, bpm) {
