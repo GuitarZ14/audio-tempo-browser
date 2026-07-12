@@ -162,6 +162,9 @@ function genPreview() {
   if (!audioBuf) return
   if (previewTimer) clearTimeout(previewTimer)
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
+  try { if (!$('op').paused) { $('op').pause(); $('upb-btn').textContent = '▶' } } catch(e) {}
+  if (vPreviewSrc) { try { vPreviewSrc.stop() } catch(e) {} vPreviewSrc = null }
+  if (vPreviewTimer) { clearTimeout(vPreviewTimer); vPreviewTimer = null }
   let m = document.querySelector('#sm .act').dataset.m
   let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
   if (!t || t < 20) return
@@ -192,7 +195,7 @@ $('bps').oninput = () => {
 $('bps').onchange = () => { if (audioBuf) genPreview() }
 let sm = document.querySelectorAll('#sm button'); let am = document.querySelectorAll('#am button')
 sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none'; stopPreview(); if (audioBuf) genPreview() })
-am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none'; if (b.dataset.m === 'inst' && audioBuf && !vPreviewSrc && !vPreviewTimer) genVPreview() })
+am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none'; if (b.dataset.m === 'inst' && audioBuf) { if (previewSrc) { try { previewSrc.stop() } catch(e) {} previewSrc = null }; if (previewTimer) { clearTimeout(previewTimer); previewTimer = null }; genVPreview() } })
 
 let vPreviewSrc = null; let vPreviewTimer = null; let vPreviewVer = 0; let vStartTime = 0
 $('vra').onchange = () => { if (audioBuf) genVPreview() }
@@ -203,6 +206,8 @@ function genVPreview() {
   if (vPreviewTimer) clearTimeout(vPreviewTimer)
   let off = vPreviewSrc ? Math.max(0, ctx.currentTime - vStartTime) : ($('op').duration ? $('op').currentTime : 0)
   try { if (!$('op').paused) { $('op').pause(); $('upb-btn').textContent = '▶' } } catch(e) {}
+  if (previewSrc) { try { previewSrc.stop() } catch(e) {} previewSrc = null }
+  if (previewTimer) { clearTimeout(previewTimer); previewTimer = null }
   vPreviewVer++; let myVer = vPreviewVer
   vPreviewTimer = setTimeout(async () => {
     vPreviewTimer = null; if (myVer !== vPreviewVer) return
