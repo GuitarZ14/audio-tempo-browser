@@ -111,7 +111,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <span style="font-size:12px;color:#888">消除强度</span>
 <input class="ps" type="range" id="vra" min="30" max="80" value="55">
 <div class="ps-l"><span>弱</span><span>强</span></div>
-<button class="pv" id="pv3" onclick="toggleVocalPreview()">🔊 试听去人声</button>
+<div style="display:flex;align-items:center;gap:8px;margin-top:10px"><button id="opb2" class="pb2" onclick="event.stopPropagation();opPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><div class="ap-pb" style="flex:1" onclick="event.stopPropagation();upbSeek(event)"><div class="ap-pb-in" id="upi2"></div></div><span style="color:#888;font-size:11px" id="utm2">0:00 / 0:00</span></div>
+<button class="pv" id="pv3" onclick="toggleVocalPreview()" style="margin-top:6px">🔊 试听去人声</button>
 </div>
 </div>
 <button class="bn" id="go">🎧 生成伴奏</button>
@@ -388,8 +389,8 @@ $('ap').addEventListener('ended', () => {
 })
 
 $('op').addEventListener('timeupdate', () => {
-  let op = $('op')
-  if (op.duration) { $('upi').style.width = (op.currentTime / op.duration * 100) + '%'; $('utm').textContent = fmt(op.currentTime) + ' / ' + fmt(op.duration) }
+  let op = $('op'), p = op.duration ? op.currentTime / op.duration * 100 : 0, t = fmt(op.currentTime) + ' / ' + fmt(op.duration)
+  if (op.duration) { $('upi').style.width = p + '%'; $('utm').textContent = t; $('upi2').style.width = p + '%'; $('utm2').textContent = t }
 })
 let opDrag = false
 $('upb').addEventListener('mousedown', e => { opDrag = true; upbSeek(e) })
@@ -404,11 +405,11 @@ function upbSeek(e) {
   op.currentTime = ((e.clientX - rect.left) / rect.width) * op.duration
 }
 function opPlay() {
-  let op = $('op'), b = $('upb-btn')
-  if (op.paused) { op.play(); b.textContent = '⏸' }
-  else { op.pause(); b.textContent = '▶' }
+  let op = $('op')
+  if (op.paused) { op.play(); $('upb-btn').textContent = '⏸'; $('opb2').textContent = '⏸' }
+  else { op.pause(); $('upb-btn').textContent = '▶'; $('opb2').textContent = '▶' }
 }
-$('op').addEventListener('ended', () => { $('upb-btn').textContent = '▶' })
+$('op').addEventListener('ended', () => { $('upb-btn').textContent = '▶'; $('opb2').textContent = '▶' })
 
 function removeCenter(buf, amt) {
   if (buf.numberOfChannels < 2) return buf
