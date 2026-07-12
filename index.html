@@ -161,27 +161,21 @@ function tp(btn) {
 }
 
 function detectBpm(buf) {
-  let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
-  let peaks = [], win = Math.floor(sr * 0.1), th = 0
-  for (let c = 0; c < ch; c++) {
-    let d = buf.getChannelData(c)
-    for (let i = win; i < ln; i += win) {
-      let e = 0; for (let j = 0; j < win; j++) e += Math.abs(d[i + j]); e /= win
-      if (i > win * 2) { let r = e / (th + 0.001); if (r > 2.5) peaks.push(i) }
-      th = th * 0.9 + e * 0.1
-    }
+  let sr = buf.sampleRate, ln = buf.length
+  let d = buf.getChannelData(0), peaks = [], win = Math.floor(sr * 0.1), th = 0
+  for (let i = win; i < ln; i += win) {
+    let e = 0; for (let j = 0; j < win; j++) e += Math.abs(d[i + j]); e /= win
+    if (i > win * 2) { let r = e / (th + 0.001); if (r > 1.8) peaks.push(i) }
+    th = th * 0.9 + e * 0.1
   }
-  if (peaks.length > 4) {
-    let ints = []
-    for (let i = 1; i < peaks.length; i++) ints.push(peaks[i] - peaks[i-1])
-    if (ints.length > 3) {
-      ints.sort((a, b) => a - b)
-      let mid = ints[Math.floor(ints.length / 2)]
-      let est = Math.round(60 / (mid / sr))
-      if (est > 40 && est < 200) return est
-    }
-  }
-  return null
+  if (peaks.length < 5) return null
+  let ints = []
+  for (let i = 1; i < peaks.length; i++) { let diff = peaks[i] - peaks[i-1]; if (diff > win * 0.5) ints.push(diff) }
+  if (ints.length < 4) return null
+  ints.sort((a, b) => a - b)
+  let mid = ints[Math.floor(ints.length / 2)]
+  let est = Math.round(60 / (mid / sr))
+  return (est > 40 && est < 200) ? est : null
 }
 
 function fmt(s) { let m = Math.floor(s / 60), se = Math.floor(s % 60); return m + ':' + (se < 10 ? '0' : '') + se }
@@ -207,7 +201,8 @@ function timeStretch(buf, sFactor) {
   let newLen = Math.round(ln / sFactor)
   let out = actx.createBuffer(ch, newLen, sr)
   let fSize = 2048, aHop = 512, sHop = Math.round(aHop / sFactor)
-  let srchD = Math.min(Math.round(aHop * 0.35), 180), srchL = 200
+  let doSearch = Math.abs(sFactor - 1) > 0.12
+  let srchD = doSearch ? Math.min(Math.round(aHop * 0.2), 50) : 0, srchL = 60
   let win = new Float32Array(fSize)
   for (let j = 0; j < fSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fSize))
 
@@ -221,7 +216,7 @@ function timeStretch(buf, sFactor) {
     let idealA = 0, sPos = 0
     while (idealA + fSize <= ln && sPos + fSize <= newLen) {
       let bestA = idealA
-      if (sPos > 0) {
+      if (sPos > 0 && doSearch) {
         let olap = Math.min(fSize - sHop, sPos, srchL)
         if (olap > 0) {
           let bestScore = -Infinity
