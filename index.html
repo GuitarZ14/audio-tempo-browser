@@ -74,7 +74,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="fi" id="fi" style="display:none">
 <div class="ap-pb" id="upb" onclick="event.stopPropagation();upbSeek(event)" style="margin-top:8px"><div class="ap-pb-in" id="upi"></div></div>
 <div style="display:flex;align-items:center;gap:8px;margin-top:4px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:3px 8px;border-radius:12px;font-size:12px">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:3px 10px;border-radius:12px;font-size:11px">更换</button></div>
-<div style="font-size:11px;color:#888;margin-top:2px;text-align:left" id="bpmn"></div>
+<div style="font-size:11px;color:#888;margin-top:2px;display:flex;align-items:center;justify-content:space-between"><span id="bpmn"></span><button id="ci-btn" onclick="event.stopPropagation();toggleCountIn()" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 6px;border-radius:6px;opacity:.35;transition:all .2s" title="开启预备拍">⏲</button></div>
 </div>
 </div>
 <input type="file" id="gi" accept=".mp3,.wav,.m4a,.aac,.ogg" hidden>
@@ -121,7 +121,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </div>
 <audio id="ap" style="display:none"></audio>
 <script>
-let actx, file, obpm = 120, bn = '', audioBuf = null
+let actx, file, obpm = 120, bn = '', audioBuf = null, obSig = '4/4', countInOn = false
 let $ = id => document.getElementById(id)
 
 function getActx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx }
@@ -137,7 +137,7 @@ async function processFile(f) {
     let buf = await getActx().decodeAudioData(await f.arrayBuffer())
     audioBuf = buf
     let bpm = detectBpm(buf)
-    if (bpm) { obpm = bpm; let sig = detectSig(buf, bpm) || '4/4'; $('bpmn').textContent = '⏱ ' + obpm + ' BPM · ' + sig
+    if (bpm) { obpm = bpm; obSig = detectSig(buf, bpm) || '4/4'; $('bpmn').textContent = '⏱ ' + obpm + ' BPM · ' + obSig
       $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').max = obpm; $('bps').value = obpm; $('bpsv').textContent = obpm }
     let op = $('op'); if (op.src) URL.revokeObjectURL(op.src)
     op.src = URL.createObjectURL(f)
@@ -164,7 +164,7 @@ function stopVPreview() {
   if (vPreviewTimer) { clearTimeout(vPreviewTimer); vPreviewTimer = null }
   if (vPreviewSrc) { try { vPreviewSrc.stop() } catch(e) {} vPreviewSrc = null }
 }
-function stopAllPreviews() { stopPreview(); stopVPreview() }
+function stopAllPreviews() { stopPreview(); stopVPreview(); stopCountIn() }
 function startProgTimer() {
   stopProgTimer()
   progTimer = setInterval(() => {
@@ -183,6 +183,7 @@ function stopProgTimer() { if (progTimer) { clearInterval(progTimer); progTimer 
 function playbackEnded() { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
 function genPreview() {
   if (!audioBuf) return
+  stopCountIn()
   if (previewTimer) clearTimeout(previewTimer)
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   try { if (!$('op').paused) { $('op').pause() } } catch(e) {}
@@ -224,6 +225,7 @@ let vPreviewSrc = null; let vPreviewTimer = null; let vPreviewVer = 0; let vStar
 $('vra').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸') genVPreview() }
 function genVPreview() {
   if (!audioBuf) return
+  stopCountIn()
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   if (audioBuf.numberOfChannels < 2) { err('单声道音频无法去人声'); return }
   if (vPreviewTimer) clearTimeout(vPreviewTimer)
@@ -396,17 +398,45 @@ function unifiedPlay() {
   if (!audioBuf) return
   let b = $('upb-btn'), op = $('op')
   if (b.textContent === '⏸') {
-    stopAllPreviews(); try { if (!op.paused) op.pause() } catch(e) {}
+    stopAllPreviews(); stopCountIn(); try { if (!op.paused) op.pause() } catch(e) {}
     stopProgTimer(); b.textContent = '▶'; return
   }
-  stopAllPreviews(); try { if (!op.paused) op.pause() } catch(e) {}; stopProgTimer()
-  if (document.querySelector('#am .act').dataset.m === 'inst') { genVPreview() }
-  else { genPreview() }
+  stopAllPreviews(); stopCountIn(); try { if (!op.paused) op.pause() } catch(e) {}; stopProgTimer()
+  if (countInOn && $('op').currentTime < 0.5) { playCountIn(); return }
+  startPlayback()
+}
+function startPlayback() {
+  if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview()
+  else genPreview()
 }
 function restartPlay() {
   if (!audioBuf) return
   $('op').currentTime = 0; $('upi').style.width = '0%'; $('utm').textContent = '0:00 / ' + fmt($('op').duration || 0)
-  if ($('upb-btn').textContent === '⏸') { stopAllPreviews(); if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() }
+  if ($('upb-btn').textContent === '⏸') { stopAllPreviews(); if (countInOn) { playCountIn() } else { startPlayback() } }
+}
+function toggleCountIn() {
+  countInOn = !countInOn
+  $('ci-btn').style.opacity = countInOn ? '1' : '.35'
+  $('ci-btn').style.background = countInOn ? 'rgba(78,205,196,.2)' : 'none'
+}
+function getCountInBeats() {
+  let n = parseInt(obSig.split('/')[0]); return isNaN(n) || n < 1 ? 4 : Math.min(n, 12)
+}
+let countInTimer = null
+function stopCountIn() { if (countInTimer) { clearTimeout(countInTimer); countInTimer = null } }
+function playCountIn() {
+  let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
+  stopCountIn(); $('upb-btn').textContent = '⏸'; stopProgTimer()
+  let beats = getCountInBeats(), interval = 60 / obpm
+  for (let i = 0; i < beats; i++) {
+    let t = ctx.currentTime + i * interval
+    let osc = ctx.createOscillator(), gain = ctx.createGain()
+    osc.frequency.value = i === 0 ? 1200 : 880
+    gain.gain.setValueAtTime(0.6, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06)
+    osc.connect(gain).connect(ctx.destination); osc.start(t); osc.stop(t + 0.06)
+  }
+  $('upi').style.width = '0%'; $('utm').textContent = '预备 ' + beats + ' 拍'
+  countInTimer = setTimeout(() => { countInTimer = null; startPlayback() }, beats * interval * 1000 + 100)
 }
 $('op').addEventListener('ended', playbackEnded)
 
