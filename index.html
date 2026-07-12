@@ -46,6 +46,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .ps::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;background:#4ecdc4;cursor:pointer}
 .ps::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#4ecdc4;cursor:pointer;border:none}
 .ps-l{display:flex;justify-content:space-between;color:#888;font-size:12px}
+#upb{height:20px;border-radius:10px;display:flex;align-items:center}
+#upi{height:6px;border-radius:3px}
 .lb{display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer}
 .lb span{font-size:14px;color:#ccc}
 .pv{display:block;width:100%;margin-top:8px;padding:10px;border-radius:20px;border:1px solid rgba(78,205,196,.4);background:transparent;color:#4ecdc4;font-size:14px;cursor:pointer}
@@ -71,7 +73,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="nt" id="unt">支持 MP3 / WAV / M4A</div>
 <div class="fi" id="fi" style="display:none">
 <div class="ap-pb" id="upb" onclick="event.stopPropagation();upbSeek(event)" style="margin-top:8px"><div class="ap-pb-in" id="upi"></div></div>
-<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:3px 10px;border-radius:12px;font-size:11px">更换</button></div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:3px 8px;border-radius:12px;font-size:12px">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:3px 10px;border-radius:12px;font-size:11px">更换</button></div>
 <div style="font-size:11px;color:#888;margin-top:2px;text-align:left" id="bpmn"></div>
 </div>
 </div>
@@ -400,6 +402,11 @@ function unifiedPlay() {
   stopAllPreviews(); try { if (!op.paused) op.pause() } catch(e) {}; stopProgTimer()
   if (document.querySelector('#am .act').dataset.m === 'inst') { genVPreview() }
   else { genPreview() }
+}
+function restartPlay() {
+  if (!audioBuf) return
+  $('op').currentTime = 0; $('upi').style.width = '0%'; $('utm').textContent = '0:00 / ' + fmt($('op').duration || 0)
+  if ($('upb-btn').textContent === '⏸') { stopAllPreviews(); if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() }
 }
 $('op').addEventListener('ended', playbackEnded)
 
