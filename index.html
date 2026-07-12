@@ -55,6 +55,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .lb span{font-size:14px;color:#ccc}
 .pv{display:block;width:100%;margin-top:8px;padding:10px;border-radius:20px;border:1px solid rgba(78,205,196,.4);background:transparent;color:#4ecdc4;font-size:14px;cursor:pointer}
 .pv:hover{background:rgba(78,205,196,.1)}
+.sc{display:flex;gap:0;margin:0 0 12px}
+.sc button{flex:1;padding:9px;border:1px solid rgba(78,205,196,.4);background:transparent;color:#aaa;cursor:pointer;font-size:14px;transition:all .15s}
+.sc button:first-child{border-radius:10px 0 0 10px}
+.sc button:last-child{border-radius:0 10px 10px 0}
+.sc button.act{background:#4ecdc4;color:#fff;border-color:#4ecdc4}
 </style>
 </head>
 <body>
@@ -76,25 +81,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <button class="tap" id="tap" onclick="tapTempo()">👆 跟着节拍点按测速</button>
 </div>
 <div class="card">
+<div style="font-size:14px;color:#aaa;margin-bottom:10px">速度模式</div>
+<div class="sc" id="sm">
+<button class="act" data-m="bpm">BPM</button>
+<button data-m="pct">百分比</button>
+</div>
+<div id="sb">
 <span style="font-size:14px;color:#aaa">目标速度（BPM）</span>
 <input class="bi" type="text" id="bps">
 <p style="color:#666;font-size:12px;margin-top:8px">用空格隔开，例如：60 80 100 120 140</p>
-<label style="display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer">
-  <input type="checkbox" id="vr" style="width:16px;height:16px;accent-color:#4ecdc4">
-  <span style="font-size:14px;color:#ccc">🎤 人声消除（伴奏模式）</span>
-</label>
-<div id="vrs" style="display:none;margin-top:8px">
-  <span style="font-size:12px;color:#888">消除强度</span>
-  <input class="ps" type="range" id="vra" min="50" max="100" value="80">
-  <div class="ps-l"><span>弱</span><span id="vrav">80%</span><span>强</span></div>
 </div>
-</div>
-<div class="card">
+<div id="sp" style="display:none">
 <span style="font-size:14px;color:#aaa">目标速度（百分比）</span>
-<input class="ps" type="range" id="pct" min="50" max="200" value="100" step="1">
+<input class="ps" type="range" id="pct" min="50" max="200" value="100">
 <div class="ps-l"><span>50%</span><span id="pctv">100%</span><span>200%</span></div>
 <p style="color:#666;font-size:12px;margin-top:4px">拖动选择原曲速度的百分比</p>
 <button class="pv" id="pv" onclick="togglePreview()">▶ 试听</button>
+</div>
+</div>
+<div class="card">
+<div style="font-size:14px;color:#aaa;margin-bottom:10px">音频模式</div>
+<div class="sc" id="am">
+<button class="act" data-m="vocal">🎤 人声</button>
+<button data-m="inst">🎵 伴奏</button>
+</div>
+<div id="ai" style="display:none">
+<span style="font-size:12px;color:#888">消除强度</span>
+<input class="ps" type="range" id="vra" min="50" max="100" value="80">
+<div class="ps-l"><span>弱</span><span id="vrav">80%</span><span>强</span></div>
+</div>
 </div>
 <button class="bn" id="go">🎧 生成伴奏</button>
 <div class="st" id="st"><p id="stx">处理中...</p><div class="pb"><div class="pb-bar" id="pbb"></div></div></div>
@@ -164,8 +179,9 @@ function togglePreview() {
 function genPreview() {
   if (!audioBuf) return
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
-  let pct = parseInt($('pct').value) / 100
-  let t = Math.round(obpm * pct)
+  let m = document.querySelector('#sm .act').dataset.m
+  let t = m === 'bpm' ? $('bps').value.trim().split(/[\s,，、]+/).map(Number).find(n => !isNaN(n) && n > 0) : Math.round(obpm * parseInt($('pct').value) / 100)
+  if (!t || t < 20) { err('请输入有效速度'); return }
   $('pv').textContent = '⏳ 处理中...'; $('pv').disabled = true
   setTimeout(async () => {
     try {
@@ -182,12 +198,20 @@ $('bps').oninput = () => {
   let nums = $('bps').value.trim().split(/[\s,，、]+/).map(Number).filter(n => !isNaN(n))
   if (nums.length === 1 && nums[0] > 0 && obpm) { let p = Math.round(nums[0] / obpm * 100); if (p >= 50 && p <= 200) { $('pct').value = p; $('pctv').textContent = p + '%' } }
 }
-$('vr').onchange = () => { $('vrs').style.display = $('vr').checked ? 'block' : 'none' }
 $('vra').oninput = () => { $('vrav').textContent = $('vra').value + '%' }
+let sm = document.querySelectorAll('#sm button'); let am = document.querySelectorAll('#am button')
+sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none' })
+am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none' })
 
 $('go').onclick = async () => {
   if (!file) { err('请先选择音频'); return }
-  let tgts = $('bps').value.trim().split(/[\s,，、]+/).map(Number).filter(n => !isNaN(n) && n > 0)
+  let sm = document.querySelector('#sm .act').dataset.m
+  let tgts
+  if (sm === 'bpm') {
+    tgts = $('bps').value.trim().split(/[\s,，、]+/).map(Number).filter(n => !isNaN(n) && n > 0)
+  } else {
+    tgts = [Math.round(obpm * parseInt($('pct').value) / 100)]
+  }
   if (!tgts.length) { err('请填写目标速度'); return }
 
   $('go').disabled = true; $('st').classList.add('sh'); $('ra').classList.remove('sh'); $('rl').innerHTML = ''; pb(0); hideErr()
@@ -197,7 +221,7 @@ $('go').onclick = async () => {
     let buf = audioBuf
     if (!buf) buf = await actx.decodeAudioData(await file.arrayBuffer())
     pb(5)
-    if ($('vr').checked) { buf = removeCenter(buf, parseInt($('vra').value) / 100); pb(7) }
+    if (document.querySelector('#am .act').dataset.m === 'inst') { buf = removeCenter(buf, parseInt($('vra').value) / 100); pb(7) }
     let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
     stx('原始 BPM：' + obpm + (buf ? ' · ' + (detectSig(buf, obpm) || '4/4') : '')); pb(10)
 
