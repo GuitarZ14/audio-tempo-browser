@@ -143,7 +143,7 @@ function updateSliderDots() {
     dots.push('radial-gradient(circle at ' + px + 'px 50%,#94a3b8 2.5px,transparent 2.5px)')
   }
   pct.style.backgroundImage = dots.join(','); pct.style.backgroundRepeat = 'no-repeat'
-  if (audioBuf && obpm && bw) {
+  if (obpm && bw) {
     let mid = Math.round(obpm / 2), f = (mid - 20) / (obpm - 20), px = 10 + (bw - tw) * f
     bps.style.backgroundImage = 'radial-gradient(circle at ' + px + 'px 50%,#94a3b8 2.5px,transparent 2.5px)'; bps.style.backgroundRepeat = 'no-repeat'
   }
