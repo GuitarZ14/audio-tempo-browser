@@ -614,8 +614,9 @@ function stx(t) { $('stx').textContent = t }
 function pb(p) { $('pbb').style.width = p + '%' }
 function err(m) { $('er').textContent = m; $('er').style.display = 'block' }
 function hideErr() { $('er').style.display = 'none' }
-setTimeout(updateSliderDots, 100)
+setTimeout(updateSliderDots, 300)
 window.addEventListener('resize', updateSliderDots)
+window.addEventListener('load', updateSliderDots)
 </script>
 </body>
 </html>
