@@ -92,7 +92,7 @@ async function processFile(f) {
     let buf = await getActx().decodeAudioData(await f.arrayBuffer())
     audioBuf = buf
     let bpm = detectBpm(buf)
-    if (bpm) { obpm = bpm; $('bpmi').textContent = '⏱ 原始速度: ' + obpm + ' BPM'; $('bpmi').classList.add('sh') }
+    if (bpm) { obpm = bpm; let sig = detectSig(buf, bpm) || '4/4'; $('bpmi').textContent = '⏱ 原始速度: ' + obpm + ' BPM · ' + sig; $('bpmi').classList.add('sh') }
   } catch(e) { console.error('BPM 检测失败', e) }
 }
 
@@ -115,7 +115,7 @@ $('go').onclick = async () => {
     if (!buf) buf = await actx.decodeAudioData(await file.arrayBuffer())
     pb(5)
     let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
-    stx('原始 BPM：' + obpm); pb(10)
+    stx('原始 BPM：' + obpm + (buf ? ' · ' + (detectSig(buf, obpm) || '4/4') : '')); pb(10)
 
     for (let i = 0; i < tgts.length; i++) {
       let t = tgts[i]; stx('处理 ' + t + ' BPM...'); pb(15 + 75 / tgts.length * i)
@@ -185,6 +185,27 @@ function detectBpm(buf) {
     if (n2 > 0 && s2 / n2 > bestS * 0.7) bpm *= 2
   }
   return (bpm > 40 && bpm < 200) ? bpm : null
+}
+
+function detectSig(buf, bpm) {
+  if (!bpm || bpm < 40) return null
+  let sr = buf.sampleRate, d = buf.getChannelData(0)
+  let bl = Math.round(60 / bpm * sr)
+  if (bl < 100) return null
+  let energies = []
+  for (let i = 0; i + bl < d.length; i += bl) {
+    let e = 0; for (let j = 0; j < bl; j++) e += Math.abs(d[i + j])
+    energies.push(e / bl)
+  }
+  if (energies.length < 8) return null
+  let maxP = Math.min(6, Math.floor(energies.length / 2)), bestP = 4, bestS = 0
+  for (let p = 2; p <= maxP; p++) {
+    let s = 0, n = 0
+    for (let i = 0; i + p < energies.length; i++) { s += energies[i] * energies[i + p]; n++ }
+    s = n > 0 ? s / n : 0
+    if (s > bestS) { bestS = s; bestP = p }
+  }
+  return { 2: '2/4', 3: '3/4', 4: '4/4', 5: '5/4', 6: '6/8' }[bestP] || '4/4'
 }
 
 function fmt(s) { let m = Math.floor(s / 60), se = Math.floor(s % 60); return m + ':' + (se < 10 ? '0' : '') + se }
