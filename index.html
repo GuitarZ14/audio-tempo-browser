@@ -115,7 +115,7 @@ $('go').onclick = async () => {
 
     for (let i = 0; i < tgts.length; i++) {
       let t = tgts[i]; stx('处理 ' + t + ' BPM...'); pb(15 + 75 / tgts.length * i)
-      let ratio = obpm / t
+      let ratio = t / obpm
       if (ratio < 0.25) ratio = 0.25
       if (ratio > 4) ratio = 4
       let result = timeStretch(buf, ratio)
@@ -157,7 +157,7 @@ function tp(url, btn) {
 
 function timeStretch(buf, sFactor) {
   let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
-  let newLen = Math.round(ln * sFactor)
+  let newLen = Math.round(ln / sFactor)
   let out = actx.createBuffer(ch, newLen, sr)
   let fSize = 2048, aHop = 512
   let sHop = Math.round(aHop / sFactor)
