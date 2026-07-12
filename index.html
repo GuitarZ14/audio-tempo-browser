@@ -6,57 +6,57 @@
 <title>变速伴奏生成器</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#1a1a2e,#16213e);min-height:100vh;color:#fff;padding:20px}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#f0f4f8,#e2e8f0);min-height:100vh;color:#1a202c;padding:20px}
 .container{max-width:500px;margin:0 auto}
 .header{text-align:center;padding:30px 0 20px}
-.header h1{font-size:28px;margin-bottom:8px}
-.header p{color:#aaa;font-size:14px}
-.card{background:rgba(255,255,255,.08);border-radius:16px;padding:24px;margin-bottom:16px}
-.ul{border:2px dashed rgba(78,205,196,.4);border-radius:12px;padding:20px;text-align:center;cursor:pointer;transition:all .2s}
-.ul:hover{border-color:#4ecdc4;background:rgba(78,205,196,.05)}
+.header h1{font-size:28px;margin-bottom:8px;color:#1a202c}
+.header p{color:#718096;font-size:14px}
+.card{background:#fff;border-radius:16px;padding:24px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.ul{border:2px dashed rgba(78,205,196,.5);border-radius:12px;padding:20px;text-align:center;cursor:pointer;transition:all .2s}
+.ul:hover{border-color:#4ecdc4;background:rgba(78,205,196,.06)}
 .ul .ic{font-size:32px;margin-bottom:6px}
-.ul .tx{font-size:14px;color:#ccc}
-.ul .nt{font-size:11px;color:#888;margin-top:4px}
-.bi{width:100%;height:48px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;text-align:center;font-size:20px;color:#fff;outline:none;margin-top:12px}
+.ul .tx{font-size:14px;color:#4a5568}
+.ul .nt{font-size:11px;color:#a0aec0;margin-top:4px}
+.bi{width:100%;height:48px;background:#edf2f7;border:1px solid #e2e8f0;border-radius:10px;text-align:center;font-size:20px;color:#1a202c;outline:none;margin-top:12px}
 .bi:focus{border-color:#4ecdc4}
 .bn{width:100%;height:52px;background:linear-gradient(135deg,#4ecdc4,#44b09e);color:#fff;border:none;border-radius:26px;font-size:18px;font-weight:600;cursor:pointer;margin-top:16px}
 .bn:disabled{opacity:.5;cursor:not-allowed}
-.st{text-align:center;padding:20px;display:none}
+.st{text-align:center;padding:20px;display:none;color:#4a5568}
 .st.sh{display:block}
-.pb{width:100%;height:6px;background:rgba(255,255,255,.1);border-radius:3px;margin-top:12px;overflow:hidden}
+.pb{width:100%;height:6px;background:#e2e8f0;border-radius:3px;margin-top:12px;overflow:hidden}
 .pb-bar{height:100%;background:#4ecdc4;width:0;transition:width .3s}
 .ra{display:none;margin-top:20px}
 .ra.sh{display:block}
-.ri{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.ri{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid #e2e8f0}
 .ri:last-child{border-bottom:none}
 .bl{font-size:20px;font-weight:700;color:#4ecdc4}
 .ac{display:flex;gap:8px}
 .ac button,.ac a{padding:8px 20px;border-radius:20px;border:none;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;color:#fff}
-.pb2{background:#4ecdc4}
-.db{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2)}
-.ft{text-align:center;padding:30px;color:#555;font-size:12px}
-.er{background:rgba(255,60,60,.1);border:1px solid rgba(255,60,60,.3);color:#ff6b6b;padding:12px;border-radius:8px;font-size:14px;margin-bottom:16px;display:none}
+.pb2{background:#4ecdc4;color:#fff}
+.db{background:#edf2f7;color:#4a5568;border:1px solid #e2e8f0}
+.ft{text-align:center;padding:30px;color:#a0aec0;font-size:12px}
+.er{background:#fff5f5;border:1px solid #feb2b2;color:#c53030;padding:12px;border-radius:8px;font-size:14px;margin-bottom:16px;display:none}
 .sh{display:block}
-.ap-w{display:none;margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.08)}
+.ap-w{display:none;margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0}
 .ap-w.sh{display:block}
-.ap-pb{width:100%;height:8px;background:rgba(255,255,255,.1);border-radius:4px;cursor:pointer;position:relative}
+.ap-pb{width:100%;height:8px;background:#e2e8f0;border-radius:4px;cursor:pointer;position:relative}
 .ap-pb-in{height:100%;background:linear-gradient(90deg,#4ecdc4,#44b09e);border-radius:4px;width:0;pointer-events:none}
-.ap-tm{text-align:right;color:#888;font-size:12px;margin-top:4px}
-.ps{width:100%;margin:8px 0;-webkit-appearance:none;appearance:none;height:6px;background:rgba(255,255,255,.1);border-radius:3px;outline:none}
+.ap-tm{text-align:right;color:#a0aec0;font-size:12px;margin-top:4px}
+.ps{width:100%;margin:8px 0;-webkit-appearance:none;appearance:none;height:6px;background:#e2e8f0;border-radius:3px;outline:none}
 .ps::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;background:#4ecdc4;cursor:pointer}
 .ps::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#4ecdc4;cursor:pointer;border:none}
-.ps-l{display:flex;justify-content:space-between;color:#888;font-size:12px}
-#upb{height:28px;border-radius:14px;display:flex;align-items:center;background:rgba(255,255,255,.06);cursor:pointer;position:relative;margin-top:8px}
-#upb:hover{background:rgba(255,255,255,.1)}
+.ps-l{display:flex;justify-content:space-between;color:#a0aec0;font-size:12px}
+#upb{height:28px;border-radius:14px;display:flex;align-items:center;background:#edf2f7;cursor:pointer;position:relative;margin-top:8px}
+#upb:hover{background:#e2e8f0}
 #upi{height:8px;border-radius:4px;background:linear-gradient(90deg,#4ecdc4,#44b09e);position:absolute;left:0;top:10px;pointer-events:none;min-width:0}
 #upthumb{width:16px;height:16px;border-radius:50%;background:#4ecdc4;position:absolute;top:6px;pointer-events:none;box-shadow:0 0 6px rgba(78,205,196,.5);transform:translateX(-50%);display:none}
 #upb:hover #upthumb,#upb.dragging #upthumb{display:block}
 .lb{display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer}
-.lb span{font-size:14px;color:#ccc}
+.lb span{font-size:14px;color:#4a5568}
 .pv{display:block;width:100%;margin-top:8px;padding:10px;border-radius:20px;border:1px solid rgba(78,205,196,.4);background:transparent;color:#4ecdc4;font-size:14px;cursor:pointer}
-.pv:hover{background:rgba(78,205,196,.1)}
+.pv:hover{background:rgba(78,205,196,.06)}
 .sc{display:flex;gap:0;margin:0 0 12px}
-.sc button{flex:1;padding:9px;border:1px solid rgba(78,205,196,.4);background:transparent;color:#aaa;cursor:pointer;font-size:14px;transition:all .15s}
+.sc button{flex:1;padding:9px;border:1px solid rgba(78,205,196,.4);background:transparent;color:#718096;cursor:pointer;font-size:14px;transition:all .15s}
 .sc button:first-child{border-radius:10px 0 0 10px}
 .sc button:last-child{border-radius:0 10px 10px 0}
 .sc button.act{background:#4ecdc4;color:#fff;border-color:#4ecdc4}
@@ -76,8 +76,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="nt" id="unt">支持 MP3 / WAV / M4A</div>
 <div class="fi" id="fi" style="display:none">
  <div class="ap-pb" id="upb" style="margin-top:0"><div class="ap-pb-in" id="upi"></div><div id="upthumb"></div></div>
-<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:3px 8px;border-radius:12px;font-size:12px">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:3px 10px;border-radius:12px;font-size:11px">更换</button></div>
-<div style="font-size:11px;color:#888;margin-top:2px;display:flex;align-items:center;justify-content:space-between"><span id="bpmn"></span><span style="display:flex;align-items:center;gap:4px"><button id="ci-btn" onclick="event.stopPropagation();toggleCountIn()" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 6px;border-radius:6px;opacity:.35;transition:all .2s" title="开启预备拍">⏲</button><span style="font-size:10px;color:#888;user-select:none">开启预备拍</span></span></div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:3px 8px;border-radius:12px;font-size:12px">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px;color:#a0aec0">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:3px 10px;border-radius:12px;font-size:11px">更换</button></div>
+<div style="font-size:11px;color:#718096;margin-top:2px;display:flex;align-items:center;justify-content:space-between"><span id="bpmn"></span><span style="display:flex;align-items:center;gap:4px"><button id="ci-btn" onclick="event.stopPropagation();toggleCountIn()" style="background:none;border:none;cursor:pointer;font-size:18px;padding:2px 6px;border-radius:6px;opacity:.45;transition:all .2s;color:#4ecdc4" title="开启预备拍">⏲</button><span style="font-size:10px;color:#a0aec0;user-select:none">开启预备拍</span></span></div>
 </div>
 </div>
 <input type="file" id="gi" accept=".mp3,.wav,.m4a,.aac,.ogg" hidden>
@@ -112,7 +112,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <button data-m="inst">🎵 去人声伴奏</button>
 </div>
 <div id="ai" style="display:none">
-<span style="font-size:12px;color:#888">消除强度</span>
+<span style="font-size:12px;color:#718096">消除强度</span>
 <input class="ps" type="range" id="vra" min="30" max="80" value="55">
 <div class="ps-l"><span>弱</span><span>强</span></div>
 </div>
@@ -435,8 +435,8 @@ function restartPlay() {
 }
 function toggleCountIn() {
   countInOn = !countInOn
-  $('ci-btn').style.opacity = countInOn ? '1' : '.35'
-  $('ci-btn').style.background = countInOn ? 'rgba(78,205,196,.2)' : 'none'
+  $('ci-btn').style.opacity = countInOn ? '1' : '.45'
+  $('ci-btn').style.background = countInOn ? 'rgba(78,205,196,.15)' : 'none'
 }
 function getCountInBeats() {
   let n = parseInt(obSig.split('/')[0]); return isNaN(n) || n < 1 ? 4 : Math.min(n, 12)
