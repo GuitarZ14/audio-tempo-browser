@@ -137,7 +137,7 @@ $('go').onclick = async () => {
       let wav = toWav(fin)
       let url = URL.createObjectURL(new Blob([wav], {type:'audio/wav'}))
       let d = document.createElement('div'); d.className = 'ri'
-      d.innerHTML = `<div><div class="bl">${t} BPM</div><div style="font-size:12px;color:#888">${bn}_${t}bpm.wav</div></div><div class="ac"><button class="pb2" onclick="ap.src='${url}';ap.play()">▶ 播放</button><a class="db" href="${url}" download="${bn}_${t}bpm.wav">下载</a></div>`
+      d.innerHTML = `<div><div class="bl">${t} BPM</div><div style="font-size:12px;color:#888">${bn}_${t}bpm.wav</div></div><div class="ac"><button class="pb2" onclick="tp('${url}',this)">▶ 播放</button><a class="db" href="${url}" download="${bn}_${t}bpm.wav">下载</a></div>`
       $('rl').appendChild(d); $('ra').classList.add('sh')
     }
     stx('✅ 完成！'); pb(100)
@@ -145,29 +145,41 @@ $('go').onclick = async () => {
   $('go').disabled = false
 }
 
-function timeStretch(buf, ratio) {
+function tp(url, btn) {
+  let ap = $('ap')
+  if (ap.src === url && !ap.paused) { ap.pause(); btn.textContent = '▶ 播放' }
+  else if (ap.src === url && ap.paused) { ap.play(); btn.textContent = '⏸ 暂停' }
+  else {
+    ap.src = url; ap.play(); btn.textContent = '⏸ 暂停'
+    document.querySelectorAll('#rl .pb2').forEach(b => { if (b !== btn) b.textContent = '▶ 播放' })
+  }
+}
+
+function timeStretch(buf, sFactor) {
   let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
-  let newLen = Math.round(ln / ratio)
+  let newLen = Math.round(ln * sFactor)
   let out = actx.createBuffer(ch, newLen, sr)
-  let fSize = Math.floor(sr * 0.06), aHop = Math.floor(fSize * 0.25)
-  if (fSize % 2) fSize++
-  let sHop = Math.round(aHop / ratio)
+  let fSize = 2048, aHop = 512
+  let sHop = Math.round(aHop / sFactor)
   let win = new Float32Array(fSize)
   for (let j = 0; j < fSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fSize))
 
   for (let c = 0; c < ch; c++) {
     let inp = buf.getChannelData(c), oup = out.getChannelData(c)
-    if (ratio > 0.99 && ratio < 1.01) {
+    if (Math.abs(sFactor - 1) < 0.01) {
       for (let j = 0; j < Math.min(ln, newLen); j++) oup[j] = inp[j]
       continue
     }
-    let aPos = 0, sPos = 0, nrm = new Float32Array(newLen)
-    while (aPos + fSize < ln && sPos + fSize < newLen) {
+    let aPos = 0, sPos = 0
+    let nrm = new Float32Array(newLen)
+    while (aPos + fSize <= ln && sPos + fSize <= newLen) {
       for (let j = 0; j < fSize; j++) {
         let idx = sPos + j
-        if (idx < newLen) { oup[idx] += inp[aPos + j] * win[j]; nrm[idx] += win[j] }
+        oup[idx] += inp[aPos + j] * win[j]
+        nrm[idx] += win[j]
       }
-      aPos += aHop; sPos += sHop
+      aPos += aHop
+      sPos += sHop
     }
     for (let j = 0; j < newLen; j++) if (nrm[j] > 0.001) oup[j] /= nrm[j]
   }
