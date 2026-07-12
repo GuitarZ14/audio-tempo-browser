@@ -265,15 +265,10 @@ function genVPreview() {
 $('go').onclick = async () => {
   if (!file) { err('请先选择音频'); return }
   let sm = document.querySelector('#sm .act').dataset.m
-  let tgts
-  if (sm === 'bpm') {
-    tgts = [parseInt($('bps').value)]
-  } else {
-    tgts = [Math.round(obpm * parseInt($('pct').value) / 100)]
-  }
-  if (!tgts.length) { err('请填写目标速度'); return }
+  let tgt = sm === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
+  if (!tgt || tgt < 20) { err('请输入有效的目标速度'); return }
 
-  $('go').disabled = true; $('st').classList.add('sh'); $('ra').classList.remove('sh'); $('rl').innerHTML = ''; pb(0); hideErr()
+  $('go').disabled = true; $('st').classList.add('sh'); $('ra').classList.remove('sh'); pb(0); hideErr()
 
   try {
     actx = getActx()
@@ -281,27 +276,43 @@ $('go').onclick = async () => {
     if (!buf) buf = await actx.decodeAudioData(await file.arrayBuffer())
     pb(5)
     if (document.querySelector('#am .act').dataset.m === 'inst') { buf = removeCenter(buf, parseInt($('vra').value) / 100); pb(7) }
-    let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
     stx('原始 BPM：' + obpm + (buf ? ' · ' + (detectSig(buf, obpm) || '4/4') : '')); pb(10)
 
-    for (let i = 0; i < tgts.length; i++) {
-      let t = tgts[i]; stx('处理 ' + t + ' BPM...'); pb(15 + 75 / tgts.length * i)
-      let ratio = t / obpm
-      if (ratio < 0.25) ratio = 0.25
-      if (ratio > 4) ratio = 4
-      let result = timeStretch(buf, ratio)
+    stx('处理 ' + tgt + ' BPM...'); pb(30)
+    let ratio = tgt / obpm
+    if (ratio < 0.25) ratio = 0.25
+    if (ratio > 4) ratio = 4
+    let result = timeStretch(buf, ratio); pb(60)
 
-      let bd = 60 / t, cls = Math.floor(sr * 0.015), bl = Math.floor(sr * bd)
-      let fin = result
-
-      stx('生成 ' + t + ' BPM...'); pb(85 + 10 / tgts.length * i)
-      let wav = toWav(fin)
-      let url = URL.createObjectURL(new Blob([wav], {type:'audio/wav'}))
-      let d = document.createElement('div'); d.className = 'ri'
-      d.innerHTML = `<div><div class="bl">${t} BPM</div><div style="font-size:12px;color:#888">${bn}_${t}bpm.wav</div></div><div class="ac"><button class="pb2" data-url="${url}" onclick="tp(this)">▶ 播放</button><a class="db" href="${url}" download="${bn}_${t}bpm.wav">下载</a></div>`
-      $('rl').appendChild(d); $('ra').classList.add('sh')
+    if (countInOn) {
+      let beats = getCountInBeats(), interval = 60 / tgt, clickLen = Math.round(buf.sampleRate * 0.06)
+      let totalClicks = Math.round(beats * interval * buf.sampleRate)
+      let newLen = result.length + totalClicks
+      let combined = actx.createBuffer(result.numberOfChannels, newLen, result.sampleRate)
+      for (let c = 0; c < result.numberOfChannels; c++) {
+        let out = combined.getChannelData(c), src = result.getChannelData(c)
+        for (let i = 0; i < beats; i++) {
+          let pos = Math.round(i * interval * buf.sampleRate)
+          let freq = i === 0 ? 1200 : 880
+          for (let j = 0; j < clickLen && pos + j < totalClicks; j++) {
+            let t = j / buf.sampleRate
+            let env = Math.exp(-t * 80) * 0.5
+            out[pos + j] += Math.sin(2 * Math.PI * freq * t) * env
+          }
+        }
+        for (let j = 0; j < src.length; j++) out[totalClicks + j] = src[j]
+      }
+      result = combined; pb(80)
     }
-    stx('✅ 完成！'); pb(100)
+
+    stx('生成文件...'); pb(85)
+    let wav = toWav(result)
+    let blob = new Blob([wav], {type:'audio/wav'})
+    let url = URL.createObjectURL(blob)
+    let a = document.createElement('a')
+    a.href = url; a.download = bn + '_' + tgt + 'bpm.wav'; a.click()
+    URL.revokeObjectURL(url)
+    stx('✅ 已保存'); pb(100)
   } catch(e) { err('处理失败: ' + e.message); console.error(e) }
   $('go').disabled = false
 }
