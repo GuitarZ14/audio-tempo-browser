@@ -231,29 +231,31 @@ function genPreview() {
   let opPos = $('op').duration ? $('op').currentTime : 0
   let off = previewSrc ? Math.max(0, ctx.currentTime - pStartTime) : opPos * obpm / t
   previewVer++; let myVer = previewVer
-  previewTimer = setTimeout(async () => {
-    previewTimer = null
-    let myVer2 = previewVer
-    if (myVer !== myVer2) return
-    try {
-      let ratio = t / obpm
-      let stretched
-      if (Math.abs(ratio - lastRatio) < 0.001 && lastStretched) {
-        stretched = lastStretched
-      } else {
-        stretched = timeStretch(audioBuf, ratio)
+  let ratio = t / obpm
+  if (Math.abs(ratio - lastRatio) < 0.001 && lastStretched) {
+    startFromBuf(lastStretched, off, myVer, ctx)
+  } else {
+    previewTimer = setTimeout(async () => {
+      previewTimer = null
+      if (myVer !== previewVer) return
+      try {
+        let stretched = timeStretch(audioBuf, ratio)
         if (myVer !== previewVer) return
         lastStretched = stretched; lastRatio = ratio
-      }
-      let src = ctx.createBufferSource()
-      src.buffer = stretched; src.connect(ctx.destination)
-      src.onended = () => { if (previewSrc === src) { previewSrc = null; playbackEnded() } }
-      src.start(0, off)
-      if (previewSrc) { try { previewSrc.stop() } catch(e) {} }
-      previewSrc = src; pStartTime = ctx.currentTime - off
-      $('upb-btn').textContent = '⏸'; startProgTimer()
-    } catch(e) {}
-  }, 50)
+        startFromBuf(stretched, off, myVer, ctx)
+      } catch(e) {}
+    }, 50)
+  }
+}
+function startFromBuf(buf, off, ver, ctx) {
+  if (ver !== previewVer) return
+  let src = ctx.createBufferSource()
+  src.buffer = buf; src.connect(ctx.destination)
+  src.onended = () => { if (previewSrc === src) { previewSrc = null; playbackEnded() } }
+  src.start(0, off)
+  if (previewSrc) { try { previewSrc.stop() } catch(e) {} }
+  previewSrc = src; pStartTime = ctx.currentTime - off
+  $('upb-btn').textContent = '⏸'; startProgTimer()
 }
 $('bps').oninput = () => {
   let v = parseInt($('bps').value)
