@@ -169,7 +169,7 @@ function stopVPreview() {
 }
 function stopAllPreviews() { stopPreview(); stopVPreview(); stopCountIn() }
 function startProgTimer() {
-  stopProgTimer()
+  if (progTimer) return
   progTimer = setInterval(() => {
     let op = $('op'), dur = op.duration || 0, cur = 0
     if (previewSrc) cur = Math.max(0, (actx ? actx.currentTime : 0) - pStartTime)
