@@ -312,7 +312,7 @@ $('go').onclick = async () => {
     let blob = new Blob([wav], {type:'audio/wav'})
     let url = URL.createObjectURL(blob)
     let a = document.createElement('a')
-    a.href = url; a.download = bn + '_' + tgt + 'bpm.wav'; a.click()
+    a.href = url; a.download = bn + '_' + (sm === 'pct' ? $('pct').value + '%' : tgt + 'bpm') + '.wav'; a.click()
     URL.revokeObjectURL(url)
     stx('✅ 已保存'); pb(100)
   } catch(e) { err('处理失败: ' + e.message); console.error(e) }
