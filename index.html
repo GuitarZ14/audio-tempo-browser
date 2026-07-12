@@ -50,22 +50,22 @@
   <div class="error" id="error"></div>
 
   <div class="card">
-    <label class="upload-label" id="uploadLabel">
+    <div class="upload-label" id="uploadLabel" onclick="document.getElementById('fileInput').click()">
       <div class="icon">📁</div>
       <div class="text">点击选择音频文件</div>
       <div class="hint">支持 MP3 / WAV / M4A</div>
-    </label>
-    <input type="file" id="fileInput" accept=".mp3,.wav,.m4a,.aac,.ogg">
+    </div>
+    <input type="file" id="fileInput" accept=".mp3,.wav,.m4a,.aac,.ogg" hidden>
     <div class="file-name" id="fileName"></div>
   </div>
 
   <div class="card">
     <span style="font-size:14px;color:#aaa">目标速度（BPM）</span>
-    <input class="bpm-input" type="text" id="bps" placeholder="80 100 120">
+    <input class="bpm-input" type="text" id="bps">
     <p style="color:#666;font-size:12px;margin-top:8px">用空格隔开，例如：60 80 100 120 140</p>
   </div>
 
-  <button class="submit-btn" id="submitBtn">⏳ 加载中...</button>
+  <button class="submit-btn" id="submitBtn" disabled>⏳ 加载中...</button>
 
   <div class="status" id="status">
     <p id="statusText">准备中...</p>
@@ -92,13 +92,20 @@ let audioName = ''
 const $ = id => document.getElementById(id)
 
 async function loadFFmpeg() {
-  const base = 'https://unpkg.com/@ffmpeg/core@0.12/dist/esm'
-  await ffmpeg.load({
-    coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm')
-  })
-  loaded = true
-  $('submitBtn').textContent = '🎧 生成伴奏'
+  try {
+    $('submitBtn').textContent = '⏳ 加载 ffmpeg (约 30MB)...'
+    const base = 'https://unpkg.com/@ffmpeg/core@0.12/dist/esm'
+    await ffmpeg.load({
+      coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
+      wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm')
+    })
+    loaded = true
+    $('submitBtn').textContent = '🎧 生成伴奏'
+    $('submitBtn').disabled = false
+  } catch (e) {
+    $('submitBtn').textContent = '❌ 加载失败，刷新重试'
+    console.error(e)
+  }
 }
 
 $('fileInput').onchange = e => {
