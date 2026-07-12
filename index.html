@@ -60,6 +60,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .sc button:first-child{border-radius:10px 0 0 10px}
 .sc button:last-child{border-radius:0 10px 10px 0}
 .sc button.act{background:#4ecdc4;color:#fff;border-color:#4ecdc4}
+#ci-btn{display:inline-flex;align-items:center;gap:6px;background:transparent;border:1.5px solid #cbd5e0;border-radius:20px;cursor:pointer;font-size:13px;color:#a0aec0;padding:5px 14px;transition:all .2s;user-select:none}
+#ci-btn:hover{border-color:#4ecdc4;color:#4ecdc4}
+#ci-btn.on{background:rgba(78,205,196,.12);border-color:#4ecdc4;color:#4ecdc4}
+#ci-btn .ci-ic{font-size:16px}
 </style>
 </head>
 <body>
@@ -77,7 +81,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="fi" id="fi" style="display:none">
  <div class="ap-pb" id="upb" style="margin-top:0"><div class="ap-pb-in" id="upi"></div><div id="upthumb"></div></div>
 <div style="display:flex;align-items:center;gap:8px;margin-top:4px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:3px 8px;border-radius:12px;font-size:12px">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px;color:#a0aec0">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:3px 10px;border-radius:12px;font-size:11px">更换</button></div>
-<div style="font-size:11px;color:#718096;margin-top:2px;display:flex;align-items:center;justify-content:space-between"><span id="bpmn"></span><span style="display:flex;align-items:center;gap:4px"><button id="ci-btn" onclick="event.stopPropagation();toggleCountIn()" style="background:none;border:none;cursor:pointer;font-size:18px;padding:2px 6px;border-radius:6px;opacity:.45;transition:all .2s;color:#4ecdc4" title="开启预备拍">⏲</button><span style="font-size:10px;color:#a0aec0;user-select:none">开启预备拍</span></span></div>
+ <div style="font-size:11px;color:#718096;margin-top:2px;display:flex;align-items:center;justify-content:space-between"><span id="bpmn"></span><button id="ci-btn" onclick="event.stopPropagation();toggleCountIn()" title="开启预备拍"><span class="ci-ic">⏲</span>开启预备拍</button></div>
 </div>
 </div>
 <input type="file" id="gi" accept=".mp3,.wav,.m4a,.aac,.ogg" hidden>
@@ -481,8 +485,7 @@ function restartPlay() {
 }
 function toggleCountIn() {
   countInOn = !countInOn
-  $('ci-btn').style.opacity = countInOn ? '1' : '.45'
-  $('ci-btn').style.background = countInOn ? 'rgba(78,205,196,.15)' : 'none'
+  $('ci-btn').classList.toggle('on')
 }
 function getCountInBeats() {
   let n = parseInt(obSig.split('/')[0]); return isNaN(n) || n < 1 ? 4 : Math.min(n, 12)
