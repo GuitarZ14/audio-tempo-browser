@@ -182,10 +182,23 @@ function genPreview() {
       let ratio = t / obpm
       let stretched = timeStretch(audioBuf, ratio)
       if (myVer !== previewVer) return
+      let sr = audioBuf.sampleRate, ch = audioBuf.numberOfChannels
+      let bl = Math.floor(sr * 60 / t), cls = Math.floor(sr * 0.015)
+      let fin = actx.createBuffer(ch, stretched.length + bl * 4, sr)
+      for (let c = 0; c < ch; c++) {
+        let fd = fin.getChannelData(c)
+        for (let b = 0; b < 4; b++) for (let j = 0; j < cls; j++) {
+          let tt = j / sr
+          fd[b * bl + j] = Math.sin(1000 * 2 * Math.PI * tt) * (1 - tt / 0.015)
+        }
+        let rd = stretched.getChannelData(c)
+        for (let j = 0; j < rd.length; j++) fd[bl * 4 + j] = rd[j]
+      }
+      if (myVer !== previewVer) return
       stopPreview()
       if (myVer !== previewVer) return
       let src = ctx.createBufferSource()
-      src.buffer = stretched; src.connect(ctx.destination)
+      src.buffer = fin; src.connect(ctx.destination)
       src.onended = () => { if (previewSrc === src) { previewSrc = null; $('pv').textContent = '▶ 试听'; $('pv').disabled = false; $('pv2').textContent = '▶ 试听'; $('pv2').disabled = false } }
       src.start(0, off); previewSrc = src; pStartTime = ctx.currentTime - off
       $('pv').textContent = '⏹ 停止'; $('pv').disabled = false; $('pv2').textContent = '⏹ 停止'; $('pv2').disabled = false
