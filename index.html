@@ -198,7 +198,8 @@ function genPreview() {
     try {
       if (previewSrc) { try { previewSrc.stop() } catch(e) {} previewSrc = null }
       if (myVer !== previewVer) return
-      let stretched = timeStretch(audioBuf, t / obpm)
+      let ratio = t / obpm
+      let stretched = ratio > 0.94 && ratio < 1.06 ? audioBuf : timeStretch(audioBuf, ratio)
       if (myVer !== previewVer) return
       let src = ctx.createBufferSource()
       src.buffer = stretched; src.connect(ctx.destination)
