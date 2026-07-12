@@ -239,6 +239,14 @@ function genVPreview() {
       if (myVer !== vPreviewVer) return
       let processed = removeCenter(audioBuf, parseInt($('vra').value) / 100)
       if (myVer !== vPreviewVer) return
+      let m = document.querySelector('#sm .act').dataset.m
+      let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
+      if (t && t >= 20) {
+        let ratio = t / obpm; if (ratio < 0.25) ratio = 0.25; if (ratio > 4) ratio = 4
+        processed = timeStretch(processed, ratio)
+        off = off * obpm / t
+      }
+      if (myVer !== vPreviewVer) return
       if (vPreviewSrc) { try { vPreviewSrc.stop() } catch(e) {} vPreviewSrc = null }
       if (myVer !== vPreviewVer) return
       let src = ctx.createBufferSource()
