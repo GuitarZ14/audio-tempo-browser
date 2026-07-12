@@ -169,9 +169,9 @@ async function processFile(f) {
 }
 
 $('gi').onchange = e => { let f = e.target.files[0]; if (f) processFile(f) }
-;(ul => { ul.addEventListener('dragover', e => { e.preventDefault(); ul.style.borderColor = '#4ecdc4' })
-  ul.addEventListener('dragleave', () => { ul.style.borderColor = '' })
-  ul.addEventListener('drop', e => { e.preventDefault(); ul.style.borderColor = ''; let f = e.dataTransfer.files[0]; if (f) processFile(f) })
+;(ul => { ul.addEventListener('dragover', e => { e.preventDefault() })
+  ul.addEventListener('dragleave', () => {})
+  ul.addEventListener('drop', e => { e.preventDefault(); let f = e.dataTransfer.files[0]; if (f) processFile(f) })
 })(document.querySelector('.ul'))
 document.querySelectorAll('#uic,#utx,#unt').forEach(el => el.addEventListener('click', () => { if (!$('fi').style.display || $('fi').style.display === 'none') $('gi').click() }))
 let previewSrc = null; let previewTimer = null; let previewVer = 0; let pStartTime = 0
