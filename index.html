@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>变速伴奏生成器</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -12,32 +12,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .header h1{font-size:28px;margin-bottom:8px}
 .header p{color:#aaa;font-size:14px}
 .card{background:rgba(255,255,255,.08);border-radius:16px;padding:24px;margin-bottom:16px}
-.upload-label{border:2px dashed rgba(78,205,196,.4);border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer}
-.upload-label:hover{border-color:#4ecdc4}
-.upload-label .icon{font-size:48px;margin-bottom:12px}
-.upload-label .text{font-size:16px;color:#ccc}
-.upload-label .hint{font-size:12px;color:#888;margin-top:8px}
-.bpm-input{width:100%;height:48px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;text-align:center;font-size:20px;color:#fff;outline:none;margin-top:12px}
-.bpm-input:focus{border-color:#4ecdc4}
-.btn{width:100%;height:52px;background:linear-gradient(135deg,#4ecdc4,#44b09e);color:#fff;border:none;border-radius:26px;font-size:18px;font-weight:600;cursor:pointer;margin-top:16px}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-.status{text-align:center;padding:20px;display:none}
-.status.show{display:block}
-.progress{width:100%;height:6px;background:rgba(255,255,255,.1);border-radius:3px;margin-top:12px;overflow:hidden}
-.progress-bar{height:100%;background:#4ecdc4;width:0;transition:width .3s}
-.result-area{display:none;margin-top:20px}
-.result-area.show{display:block}
-.result-item{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid rgba(255,255,255,.06)}
-.result-item:last-child{border-bottom:none}
-.bpm-label{font-size:20px;font-weight:700;color:#4ecdc4}
-.actions{display:flex;gap:8px}
-.actions button,.actions a{padding:8px 20px;border-radius:20px;border:none;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;color:#fff}
-.play-btn{background:#4ecdc4}
-.dl-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2)}
-.footer{text-align:center;padding:30px;color:#555;font-size:12px}
-.error{background:rgba(255,60,60,.1);border:1px solid rgba(255,60,60,.3);color:#ff6b6b;padding:12px;border-radius:8px;font-size:14px;margin-bottom:16px;display:none}
-.fname{display:none;padding:12px;background:rgba(78,205,196,.1);border-radius:8px;font-size:14px;color:#4ecdc4;text-align:center;margin-top:12px}
-.fname.show{display:block}
+.ul{border:2px dashed rgba(78,205,196,.4);border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:all .2s}
+.ul:hover{border-color:#4ecdc4;background:rgba(78,205,196,.05)}
+.ul .ic{font-size:48px;margin-bottom:12px}
+.ul .tx{font-size:16px;color:#ccc}
+.ul .nt{font-size:12px;color:#888;margin-top:8px}
+.bi{width:100%;height:48px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;text-align:center;font-size:20px;color:#fff;outline:none;margin-top:12px}
+.bi:focus{border-color:#4ecdc4}
+.bn{width:100%;height:52px;background:linear-gradient(135deg,#4ecdc4,#44b09e);color:#fff;border:none;border-radius:26px;font-size:18px;font-weight:600;cursor:pointer;margin-top:16px}
+.bn:disabled{opacity:.5;cursor:not-allowed}
+.st{text-align:center;padding:20px;display:none}
+.st.sh{display:block}
+.pb{width:100%;height:6px;background:rgba(255,255,255,.1);border-radius:3px;margin-top:12px;overflow:hidden}
+.pb-bar{height:100%;background:#4ecdc4;width:0;transition:width .3s}
+.ra{display:none;margin-top:20px}
+.ra.sh{display:block}
+.ri{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.ri:last-child{border-bottom:none}
+.bl{font-size:20px;font-weight:700;color:#4ecdc4}
+.ac{display:flex;gap:8px}
+.ac button,.ac a{padding:8px 20px;border-radius:20px;border:none;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;color:#fff}
+.pb2{background:#4ecdc4}
+.db{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2)}
+.ft{text-align:center;padding:30px;color:#555;font-size:12px}
+.er{background:rgba(255,60,60,.1);border:1px solid rgba(255,60,60,.3);color:#ff6b6b;padding:12px;border-radius:8px;font-size:14px;margin-bottom:16px;display:none}
+.fn{display:none;padding:12px;background:rgba(78,205,196,.1);border-radius:8px;font-size:14px;color:#4ecdc4;text-align:center;margin-top:12px}
+.fn.sh{display:block}
 </style>
 </head>
 <body>
@@ -46,187 +46,154 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <h1>🎵 变速伴奏生成器</h1>
 <p>上传音频，自动生成多种速度的伴奏</p>
 </div>
-<div class="error" id="error"></div>
+<div class="er" id="er"></div>
 <div class="card">
-<div class="upload-label" id="uploadLabel" onclick="document.getElementById('fileInput').click()">
-<div class="icon">📁</div>
-<div class="text">点击选择音频文件</div>
-<div class="hint">支持 MP3 / WAV / M4A</div>
+<div class="ul" onclick="gi.click()">
+<div class="ic">📁</div>
+<div class="tx">点击选择音频文件</div>
+<div class="nt">支持 MP3 / WAV / M4A</div>
 </div>
-<input type="file" id="fileInput" accept=".mp3,.wav,.m4a,.aac,.ogg" hidden>
-<div class="fname" id="fname"></div>
+<input type="file" id="gi" accept=".mp3,.wav,.m4a,.aac,.ogg" hidden>
+<div class="fn" id="fn"></div>
 </div>
 <div class="card">
 <span style="font-size:14px;color:#aaa">目标速度（BPM）</span>
-<input class="bpm-input" type="text" id="bps">
+<input class="bi" type="text" id="bps">
 <p style="color:#666;font-size:12px;margin-top:8px">用空格隔开，例如：60 80 100 120 140</p>
 </div>
-<button class="btn" id="goBtn">🎧 生成伴奏</button>
-<div class="status" id="status"><p id="st">处理中...</p><div class="progress"><div class="progress-bar" id="pb"></div></div></div>
-<div class="card result-area" id="resultArea"><div id="resultList"></div></div>
-<div class="footer">每段音频自动添加 4 拍预备拍</div>
+<button class="bn" id="go">🎧 生成伴奏</button>
+<div class="st" id="st"><p id="stx">处理中...</p><div class="pb"><div class="pb-bar" id="pbb"></div></div></div>
+<div class="card ra" id="ra"><div id="rl"></div></div>
+<div class="ft">每段音频自动添加 4 拍预备拍</div>
 </div>
-<audio id="player" style="display:none"></audio>
+<audio id="ap" style="display:none"></audio>
 <script>
-const AUDIO = window.AudioContext || window.webkitAudioContext
-let actx, file, origBpm = 120, baseName = ''
+let actx, file, obpm = 120, bn = ''
 let $ = id => document.getElementById(id)
 
-$('fileInput').onchange = e => {
+$('gi').onchange = e => {
   let f = e.target.files[0]
   if (!f) return
-  if (f.size > 100e6) { show('文件过大（限 100MB）'); return }
-  file = f
-  baseName = f.name.replace(/\.[^.]+$/, '')
-  $('fname').textContent = '✅ ' + f.name
-  $('fname').classList.add('show')
+  if (f.size > 100e6) { err('文件过大（限 100MB）'); return }
+  file = f; bn = f.name.replace(/\.[^.]+$/, '')
+  $('fn').textContent = '✅ ' + f.name; $('fn').classList.add('sh')
   hideErr()
 }
 
-$('goBtn').onclick = async () => {
-  if (!file) { show('请先选择音频'); return }
-  let targets = $('bps').value.trim().split(/[\s,，、]+/).map(Number).filter(n => !isNaN(n) && n > 0)
-  if (!targets.length) { show('请填写目标速度'); return }
+$('go').onclick = async () => {
+  if (!file) { err('请先选择音频'); return }
+  let tgts = $('bps').value.trim().split(/[\s,，、]+/).map(Number).filter(n => !isNaN(n) && n > 0)
+  if (!tgts.length) { err('请填写目标速度'); return }
 
-  $('goBtn').disabled = true
-  $('status').classList.add('show')
-  $('resultArea').classList.remove('show')
-  $('resultList').innerHTML = ''
-  setP(0)
-  hideErr()
+  $('go').disabled = true; $('st').classList.add('sh'); $('ra').classList.remove('sh'); $('rl').innerHTML = ''; pb(0); hideErr()
 
   try {
-    actx = new AUDIO()
-    let buf = await actx.decodeAudioData(await file.arrayBuffer())
-    setP(5)
-
-    let sr = buf.sampleRate
-    let ch = buf.numberOfChannels
-    let len = buf.length
-    origBpm = 120
-
-    let beats = []
+    actx = new (window.AudioContext || window.webkitAudioContext)()
+    let buf = await actx.decodeAudioData(await file.arrayBuffer()); pb(5)
+    let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
+    let peaks = [], win = Math.floor(sr * 0.1), th = 0
     for (let c = 0; c < ch; c++) {
-      let data = buf.getChannelData(c)
-      let energy = 0
-      let windowSize = Math.floor(sr * 0.05)
-      for (let i = windowSize; i < len; i += windowSize) {
-        let e = 0
-        for (let j = 0; j < windowSize; j++) e += Math.abs(data[i + j])
-        e /= windowSize
-        if (i > windowSize * 3 && e > energy * 2.5) beats.push(i)
-        energy = energy * 0.9 + e * 0.1
+      let d = buf.getChannelData(c)
+      for (let i = win; i < ln; i += win) {
+        let e = 0; for (let j = 0; j < win; j++) e += Math.abs(d[i + j]); e /= win
+        if (i > win * 2) { let r = e / (th + 0.001); if (r > 2.5) peaks.push(i) }
+        th = th * 0.9 + e * 0.1
       }
     }
-    if (beats.length > 4) {
-      let intervals = []
-      for (let i = 1; i < beats.length; i++) intervals.push(beats[i] - beats[i - 1])
-      intervals.sort((a, b) => a - b)
-      let med = intervals[Math.floor(intervals.length / 2)]
-      let bpm = Math.round(60 / (med / sr))
-      if (bpm > 30 && bpm < 300) origBpm = bpm
+    if (peaks.length > 3) {
+      let ints = []
+      for (let i = 1; i < peaks.length; i++) ints.push(peaks[i] - peaks[0])
+      if (ints.length > 3) {
+        let est = Math.round(60 / (ints[Math.floor(ints.length / 2)] / sr))
+        if (est > 20 && est < 300) obpm = est
+        if (obpm > 160) obpm = Math.round(obpm / 2)
+      }
     }
 
-    for (let i = 0; i < targets.length; i++) {
-      let tgt = targets[i]
-      setT(`正在处理 ${tgt} BPM...`); setP(10 + 80 / targets.length * i)
+    stx('原始 BPM：' + obpm); pb(10)
 
-      let ratio = origBpm / tgt
-      let ws = Math.floor(sr * 0.05)
-      let hop = Math.floor(ws * 0.5)
-      let oHop = Math.round(hop * ratio)
-      let newLen = Math.round(len / ratio)
-      let out = actx.createBuffer(ch, newLen, sr)
-      for (let c = 0; c < ch; c++) {
-        let inp = buf.getChannelData(c)
-        let oup = out.getChannelData(c)
-        let pos = 0, oPos = 0
-        while (pos + ws < len && oPos + ws < newLen) {
-          for (let j = 0; j < ws; j++) {
-            let win = 0.5 * (1 - Math.cos(2 * Math.PI * j / ws))
-            if (oPos + j < newLen) oup[oPos + j] += inp[pos + j] * win
-          }
-          let best = 0
-          if (pos + hop * 2 < len) {
-            let bestCorr = -1
-            for (let s = -Math.floor(ws * 0.1); s < Math.floor(ws * 0.1); s++) {
-              let corr = 0, nrm = 0, n = Math.min(ws, len - pos - hop - s, newLen - oPos - oHop)
-              for (let j = 0; j < n; j++) {
-                corr += inp[pos + hop + j] * inp[pos + hop + j + s]
-                nrm += inp[pos + hop + j] * inp[pos + hop + j]
-              }
-              if (nrm > 0) { corr /= nrm; if (corr > bestCorr) { bestCorr = corr; best = s } }
-            }
-          }
-          pos += hop + best
-          oPos += oHop
-        }
-      }
+    for (let i = 0; i < tgts.length; i++) {
+      let t = tgts[i]; stx('处理 ' + t + ' BPM...'); pb(15 + 75 / tgts.length * i)
+      let ratio = obpm / t
+      if (ratio < 0.25) ratio = 0.25
+      if (ratio > 4) ratio = 4
+      let result = timeStretch(buf, ratio)
 
-      let bd = 60 / tgt
-      let cls = Math.floor(sr * 0.015)
-      let bl = Math.floor(sr * bd)
-      let tl = out.length + bl * 4
+      let bd = 60 / t, cls = Math.floor(sr * 0.015), bl = Math.floor(sr * bd)
+      let tl = result.length + bl * 4
       let fin = actx.createBuffer(ch, tl, sr)
       for (let c = 0; c < ch; c++) {
         let fd = fin.getChannelData(c)
-        for (let b = 0; b < 4; b++) {
-          for (let j = 0; j < cls; j++) {
-            let t = j / sr
-            let v = Math.sin(1000 * 2 * Math.PI * t) * (1 - t / 0.015)
-            fd[b * bl + j] = v
-          }
+        for (let b = 0; b < 4; b++) for (let j = 0; j < cls; j++) {
+          let tt = j / sr
+          fd[b * bl + j] = Math.sin(1000 * 2 * Math.PI * tt) * (1 - tt / 0.015)
         }
-        let outD = out.getChannelData(c)
-        for (let j = 0; j < outD.length; j++) fd[bl * 4 + j] = outD[j]
+        let rd = result.getChannelData(c)
+        for (let j = 0; j < rd.length; j++) fd[bl * 4 + j] = rd[j]
       }
 
-      setT(`生成 ${tgt} BPM...`); setP(70 + 20 / targets.length * i)
-      let wav = bufferToWav(fin)
-      let blob = new Blob([wav], {type:'audio/wav'})
-      let url = URL.createObjectURL(blob)
-
-      let div = document.createElement('div')
-      div.className = 'result-item'
-      div.innerHTML = `<div><div class="bpm-label">${tgt} BPM</div><div style="font-size:12px;color:#888">${baseName}_${tgt}bpm.wav</div></div><div class="actions"><button class="play-btn" onclick="play('${url}')">▶ 播放</button><a class="dl-btn" href="${url}" download="${baseName}_${tgt}bpm.wav">下载</a></div>`
-      $('resultList').appendChild(div)
-      $('resultArea').classList.add('show')
+      stx('生成 ' + t + ' BPM...'); pb(85 + 10 / tgts.length * i)
+      let wav = toWav(fin)
+      let url = URL.createObjectURL(new Blob([wav], {type:'audio/wav'}))
+      let d = document.createElement('div'); d.className = 'ri'
+      d.innerHTML = `<div><div class="bl">${t} BPM</div><div style="font-size:12px;color:#888">${bn}_${t}bpm.wav</div></div><div class="ac"><button class="pb2" onclick="ap.src='${url}';ap.play()">▶ 播放</button><a class="db" href="${url}" download="${bn}_${t}bpm.wav">下载</a></div>`
+      $('rl').appendChild(d); $('ra').classList.add('sh')
     }
-    setT('✅ 完成！'); setP(100)
-  } catch(e) { show('处理失败: ' + e.message); console.error(e) }
-  $('goBtn').disabled = false
+    stx('✅ 完成！'); pb(100)
+  } catch(e) { err('处理失败: ' + e.message); console.error(e) }
+  $('go').disabled = false
 }
 
-function play(url) {
-  let p = document.getElementById('player')
-  p.src = url; p.play()
+function timeStretch(buf, ratio) {
+  let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
+  let newLen = Math.round(ln / ratio)
+  let out = actx.createBuffer(ch, newLen, sr)
+  let fSize = Math.floor(sr * 0.06), aHop = Math.floor(fSize * 0.25)
+  if (fSize % 2) fSize++
+  let sHop = Math.round(aHop / ratio)
+  let win = new Float32Array(fSize)
+  for (let j = 0; j < fSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fSize))
+
+  for (let c = 0; c < ch; c++) {
+    let inp = buf.getChannelData(c), oup = out.getChannelData(c)
+    if (ratio > 0.99 && ratio < 1.01) {
+      for (let j = 0; j < Math.min(ln, newLen); j++) oup[j] = inp[j]
+      continue
+    }
+    let aPos = 0, sPos = 0, nrm = new Float32Array(newLen)
+    while (aPos + fSize < ln && sPos + fSize < newLen) {
+      for (let j = 0; j < fSize; j++) {
+        let idx = sPos + j
+        if (idx < newLen) { oup[idx] += inp[aPos + j] * win[j]; nrm[idx] += win[j] }
+      }
+      aPos += aHop; sPos += sHop
+    }
+    for (let j = 0; j < newLen; j++) if (nrm[j] > 0.001) oup[j] /= nrm[j]
+  }
+  return out
 }
 
-function bufferToWav(buf) {
-  let ch = buf.numberOfChannels, sr = buf.sampleRate, len = buf.length
-  let dataLen = len * ch * 2
-  let arr = new ArrayBuffer(44 + dataLen)
-  let v = new DataView(arr)
+function toWav(buf) {
+  let ch = buf.numberOfChannels, sr = buf.sampleRate, ln = buf.length
+  let dl = ln * ch * 2, a = new ArrayBuffer(44 + dl), v = new DataView(a)
   let w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)) }
-  w(0, 'RIFF'); v.setUint32(4, 36 + dataLen, true); w(8, 'WAVE')
-  w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true)
-  v.setUint16(22, ch, true); v.setUint32(24, sr, true)
-  v.setUint32(28, sr * ch * 2, true); v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true)
-  w(36, 'data'); v.setUint32(40, dataLen, true)
-  let off = 44
-  for (let i = 0; i < len; i++)
-    for (let c = 0; c < ch; c++) {
-      let s = Math.max(-1, Math.min(1, buf.getChannelData(c)[i]))
-      v.setInt16(off, s < 0 ? s * 32768 : s * 32767, true)
-      off += 2
-    }
-  return arr
+  w(0,'RIFF'); v.setUint32(4,36+dl,true); w(8,'WAVE')
+  w(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true)
+  v.setUint16(22,ch,true); v.setUint32(24,sr,true)
+  v.setUint32(28,sr*ch*2,true); v.setUint16(32,ch*2,true); v.setUint16(34,16,true)
+  w(36,'data'); v.setUint32(40,dl,true)
+  let o = 44
+  for (let i = 0; i < ln; i++) for (let c = 0; c < ch; c++) {
+    let s = Math.max(-1, Math.min(1, buf.getChannelData(c)[i]))
+    v.setInt16(o, s < 0 ? s * 32768 : s * 32767, true); o += 2
+  }
+  return a
 }
 
-function setT(t) { $('st').textContent = t }
-function setP(p) { $('pb').style.width = p + '%' }
-function show(m) { $('error').textContent = m; $('error').style.display = 'block' }
-function hideErr() { $('error').style.display = 'none' }
+function stx(t) { $('stx').textContent = t }
+function pb(p) { $('pbb').style.width = p + '%' }
+function err(m) { $('er').textContent = m; $('er').style.display = 'block' }
+function hideErr() { $('er').style.display = 'none' }
 </script>
 </body>
 </html>
