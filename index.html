@@ -161,21 +161,30 @@ function tp(btn) {
 }
 
 function detectBpm(buf) {
-  let sr = buf.sampleRate, ln = buf.length
-  let d = buf.getChannelData(0), peaks = [], win = Math.floor(sr * 0.1), th = 0
-  for (let i = win; i < ln; i += win) {
-    let e = 0; for (let j = 0; j < win; j++) e += Math.abs(d[i + j]); e /= win
-    if (i > win * 2) { let r = e / (th + 0.001); if (r > 1.8) peaks.push(i) }
-    th = th * 0.9 + e * 0.1
+  let sr = buf.sampleRate, d = buf.getChannelData(0)
+  let hop = Math.floor(sr * 0.01), win = Math.floor(sr * 0.02)
+  let onset = [], prev = 0
+  for (let i = 0; i + win < d.length; i += hop) {
+    let e = 0; for (let j = 0; j < win; j++) e += d[i + j] * d[i + j]
+    e = Math.sqrt(e / win); onset.push(Math.max(0, e - prev)); prev = e
   }
-  if (peaks.length < 5) return null
-  let ints = []
-  for (let i = 1; i < peaks.length; i++) { let diff = peaks[i] - peaks[i-1]; if (diff > win * 0.5) ints.push(diff) }
-  if (ints.length < 4) return null
-  ints.sort((a, b) => a - b)
-  let mid = ints[Math.floor(ints.length / 2)]
-  let est = Math.round(60 / (mid / sr))
-  return (est > 40 && est < 200) ? est : null
+  if (onset.length < 50) return null
+  let minL = Math.round(60 / 300 * sr / hop), maxL = Math.round(60 / 40 * sr / hop)
+  let bestL = minL, bestS = 0
+  for (let lag = minL; lag <= maxL; lag++) {
+    let s = 0, n = 0
+    for (let i = 0; i + lag < onset.length; i++) { s += onset[i] * onset[i + lag]; n++ }
+    s = n > 0 ? s / n : 0
+    if (s > bestS) { bestS = s; bestL = lag }
+  }
+  let bpm = Math.round(60 / (bestL * hop / sr))
+  let halfL = Math.round(bestL / 2)
+  if (halfL >= minL) {
+    let s2 = 0, n2 = 0
+    for (let i = 0; i + halfL < onset.length; i++) { s2 += onset[i] * onset[i + halfL]; n2++ }
+    if (n2 > 0 && s2 / n2 > bestS * 0.7) bpm *= 2
+  }
+  return (bpm > 40 && bpm < 200) ? bpm : null
 }
 
 function fmt(s) { let m = Math.floor(s / 60), se = Math.floor(s % 60); return m + ':' + (se < 10 ? '0' : '') + se }
