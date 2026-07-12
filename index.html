@@ -178,7 +178,7 @@ $('pct').oninput = () => {
   let v = parseInt($('pct').value); $('pctv').textContent = v + '%'
   if (audioBuf && obpm) { $('bpsv').textContent = Math.round(obpm * v / 100); $('bps').value = Math.round(obpm * v / 100) }
 }
-$('pct').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸' && document.querySelector('#am .act').dataset.m !== 'inst') genPreview() }
+$('pct').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸') { if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() } }
 function stopPreview() {
   if (previewTimer) { clearTimeout(previewTimer); previewTimer = null }
   if (previewSrc) { try { previewSrc.stop() } catch(e) {} previewSrc = null }
@@ -261,9 +261,9 @@ $('bps').oninput = () => {
   if (audioBuf) { $('bpsv').textContent = v } else return
   if (obpm) { let p = Math.round(v / obpm * 100); $('pct').value = Math.max(30, Math.min(150, p)); $('pctv').textContent = $('pct').value + '%' }
 }
-$('bps').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸' && document.querySelector('#am .act').dataset.m !== 'inst') genPreview() }
+$('bps').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸') { if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() } }
 let sm = document.querySelectorAll('#sm button'); let am = document.querySelectorAll('#am button')
-sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none'; updateSliderDots(); if (audioBuf && $('upb-btn').textContent === '⏸') genPreview() })
+sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none'; updateSliderDots(); if (audioBuf && $('upb-btn').textContent === '⏸') { if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() } })
 am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none'; if (audioBuf && $('upb-btn').textContent === '⏸') { if (b.dataset.m === 'inst') genVPreview(); else genPreview() } })
 
 let vPreviewSrc = null; let vPreviewTimer = null; let vPreviewVer = 0; let vStartTime = 0; let progTimer = null
