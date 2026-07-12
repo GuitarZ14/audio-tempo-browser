@@ -149,7 +149,7 @@ async function processFile(f) {
   if (!f) return
   if (f.size > 100e6) { err('文件过大（限 100MB）'); return }
   file = f; bn = f.name.replace(/\.[^.]+$/, '')
-  hideErr(); audioBuf = null
+  hideErr(); audioBuf = null; lastStretched = null; lastRatio = 0
   $('uic').style.display = 'none'; $('utx').style.display = 'none'; $('unt').style.display = 'none'
   $('fi').style.display = 'block'; $('fin').textContent = f.name; $('utm').textContent = '0:00 / 0:00'; setProg(0)
   try {
@@ -171,6 +171,7 @@ $('gi').onchange = e => { let f = e.target.files[0]; if (f) processFile(f) }
 })(document.querySelector('.ul'))
 document.querySelectorAll('#uic,#utx,#unt').forEach(el => el.addEventListener('click', () => { if (!$('fi').style.display || $('fi').style.display === 'none') $('gi').click() }))
 let previewSrc = null; let previewTimer = null; let previewVer = 0; let pStartTime = 0
+let lastStretched = null, lastRatio = 0
 $('pct').oninput = () => {
   let v = parseInt($('pct').value); $('pctv').textContent = v + '%'
   if (audioBuf && obpm) { $('bpsv').textContent = Math.round(obpm * v / 100); $('bps').value = Math.round(obpm * v / 100) }
@@ -217,18 +218,24 @@ function genPreview() {
   previewVer++; let myVer = previewVer
   previewTimer = setTimeout(async () => {
     previewTimer = null
-    if (myVer !== previewVer) return
+    let myVer2 = previewVer
+    if (myVer !== myVer2) return
     try {
-      if (myVer !== previewVer) return
       let ratio = t / obpm
-      let stretched = timeStretch(audioBuf, ratio)
-      if (myVer !== previewVer) return
-      stopPreview()
-      if (myVer !== previewVer) return
+      let stretched
+      if (Math.abs(ratio - lastRatio) < 0.001 && lastStretched) {
+        stretched = lastStretched
+      } else {
+        stretched = timeStretch(audioBuf, ratio)
+        if (myVer !== previewVer) return
+        lastStretched = stretched; lastRatio = ratio
+      }
       let src = ctx.createBufferSource()
       src.buffer = stretched; src.connect(ctx.destination)
       src.onended = () => { if (previewSrc === src) { previewSrc = null; playbackEnded() } }
-      src.start(0, off); previewSrc = src; pStartTime = ctx.currentTime - off
+      src.start(0, off)
+      if (previewSrc) { try { previewSrc.stop() } catch(e) {} }
+      previewSrc = src; pStartTime = ctx.currentTime - off
       $('upb-btn').textContent = '⏸'; startProgTimer()
     } catch(e) {}
   }, 50)
@@ -258,7 +265,6 @@ function genVPreview() {
   vPreviewTimer = setTimeout(async () => {
     vPreviewTimer = null; if (myVer !== vPreviewVer) return
     try {
-      if (myVer !== vPreviewVer) return
       let processed = removeCenter(audioBuf, parseInt($('vra').value) / 100)
       if (myVer !== vPreviewVer) return
       let m = document.querySelector('#sm .act').dataset.m
@@ -269,12 +275,12 @@ function genVPreview() {
         off = off * obpm / t
       }
       if (myVer !== vPreviewVer) return
-      if (vPreviewSrc) { try { vPreviewSrc.stop() } catch(e) {} vPreviewSrc = null }
-      if (myVer !== vPreviewVer) return
       let src = ctx.createBufferSource()
       src.buffer = processed; src.connect(ctx.destination)
       src.onended = () => { if (vPreviewSrc === src) { vPreviewSrc = null; playbackEnded() } }
-      src.start(0, off); vPreviewSrc = src; vStartTime = ctx.currentTime - off
+      src.start(0, off)
+      if (vPreviewSrc) { try { vPreviewSrc.stop() } catch(e) {} vPreviewSrc = null }
+      vPreviewSrc = src; vStartTime = ctx.currentTime - off
       $('upb-btn').textContent = '⏸'; startProgTimer()
     } catch(e) {}
   }, 100)
@@ -425,10 +431,10 @@ let seekRestart = () => {
     if (previewSrc) { stopPreview(); genPreview() } else { stopVPreview(); genVPreview() }
   }
 }
-$('upb').addEventListener('mousedown', e => { e.stopPropagation(); opDrag = true; $('upb').classList.add('dragging'); upbSeek(e); updateProgDisplay(); seekRestart() })
+$('upb').addEventListener('mousedown', e => { e.stopPropagation(); opDrag = true; $('upb').classList.add('dragging'); upbSeek(e); updateProgDisplay() })
 document.addEventListener('mousemove', e => { if (opDrag) { e.preventDefault(); upbSeek(e); updateProgDisplay() } })
 document.addEventListener('mouseup', () => { if (opDrag) { seekRestart() }; $('upb').classList.remove('dragging'); opDrag = false })
-$('upb').addEventListener('touchstart', e => { e.stopPropagation(); opDrag = true; $('upb').classList.add('dragging'); upbSeek(e.touches[0]); updateProgDisplay(); seekRestart() })
+$('upb').addEventListener('touchstart', e => { e.stopPropagation(); opDrag = true; $('upb').classList.add('dragging'); upbSeek(e.touches[0]); updateProgDisplay() })
 document.addEventListener('touchmove', e => { if (opDrag) { e.preventDefault(); upbSeek(e.touches[0]); updateProgDisplay() } })
 document.addEventListener('touchend', () => { if (opDrag) { seekRestart() }; $('upb').classList.remove('dragging'); opDrag = false })
 function upbSeek(e) {
