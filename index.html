@@ -194,6 +194,7 @@ function stopProgTimer() { if (progTimer) { clearInterval(progTimer); progTimer 
 function startProgTimer() {
   if (progTimer) return
   progTimer = setInterval(() => {
+    if (opDrag) return
     let op = $('op'), dur = op.duration && isFinite(op.duration) && op.duration > 0 ? op.duration : (audioBuf ? audioBuf.duration / audioBuf.sampleRate : 0), cur = 0
     if (previewSrc) cur = Math.max(0, (actx ? actx.currentTime : 0) - pStartTime)
     else if (vPreviewSrc) cur = Math.max(0, (actx ? actx.currentTime : 0) - vStartTime)
@@ -448,10 +449,20 @@ let seekRestart = () => {
     if (previewSrc) { stopPreview(); genPreview() } else { stopVPreview(); genVPreview() }
   }
 }
-$('upb').addEventListener('mousedown', e => { e.stopPropagation(); opDrag = true; $('upb').classList.add('dragging'); upbSeek(e); updateProgDisplay() })
+function syncTimerPos() {
+  if (!(previewSrc || vPreviewSrc) || !actx) return
+  let m = document.querySelector('#sm .act').dataset.m
+  let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
+  if (!t || t < 20) return
+  let opPos = $('op').currentTime || 0
+  let newPStart = actx.currentTime - opPos * obpm / t
+  if (previewSrc) pStartTime = newPStart
+  else if (vPreviewSrc) vStartTime = newPStart
+}
+$('upb').addEventListener('mousedown', e => { e.stopPropagation(); opDrag = true; $('upb').classList.add('dragging'); upbSeek(e); updateProgDisplay(); syncTimerPos() })
 document.addEventListener('mousemove', e => { if (opDrag) { e.preventDefault(); upbSeek(e); updateProgDisplay() } })
 document.addEventListener('mouseup', () => { if (opDrag) { seekRestart() }; $('upb').classList.remove('dragging'); opDrag = false })
-$('upb').addEventListener('touchstart', e => { e.stopPropagation(); opDrag = true; $('upb').classList.add('dragging'); upbSeek(e.touches[0]); updateProgDisplay() })
+$('upb').addEventListener('touchstart', e => { e.stopPropagation(); opDrag = true; $('upb').classList.add('dragging'); upbSeek(e.touches[0]); updateProgDisplay(); syncTimerPos() })
 document.addEventListener('touchmove', e => { if (opDrag) { e.preventDefault(); upbSeek(e.touches[0]); updateProgDisplay() } })
 document.addEventListener('touchend', () => { if (opDrag) { seekRestart() }; $('upb').classList.remove('dragging'); opDrag = false })
 function upbSeek(e) {
