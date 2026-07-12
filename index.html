@@ -390,13 +390,18 @@ $('ap').addEventListener('ended', () => {
   document.querySelectorAll('#rl .pb2').forEach(b => b.textContent = '▶ 播放')
 })
 
-let opDrag = false, opDragSeeked = false
-$('upb').addEventListener('mousedown', e => { e.stopPropagation(); opDrag = true; opDragSeeked = false; $('upb').classList.add('dragging'); upbSeek(e); updateProgDisplay() })
-document.addEventListener('mousemove', e => { if (opDrag) { e.preventDefault(); upbSeek(e); updateProgDisplay(); opDragSeeked = true } })
-document.addEventListener('mouseup', () => { if (opDrag && opDragSeeked && $('upb-btn').textContent === '⏸' && (previewSrc || vPreviewSrc)) { if (previewSrc) { stopPreview(); genPreview() } else { stopVPreview(); genVPreview() } }; $('upb').classList.remove('dragging'); opDrag = false })
-$('upb').addEventListener('touchstart', e => { e.stopPropagation(); opDrag = true; opDragSeeked = false; $('upb').classList.add('dragging'); upbSeek(e.touches[0]); updateProgDisplay() })
-document.addEventListener('touchmove', e => { if (opDrag) { e.preventDefault(); upbSeek(e.touches[0]); updateProgDisplay(); opDragSeeked = true } })
-document.addEventListener('touchend', () => { if (opDrag && opDragSeeked && $('upb-btn').textContent === '⏸' && (previewSrc || vPreviewSrc)) { if (previewSrc) { stopPreview(); genPreview() } else { stopVPreview(); genVPreview() } }; $('upb').classList.remove('dragging'); opDrag = false })
+let opDrag = false
+let seekRestart = () => {
+  if ($('upb-btn').textContent === '⏸' && (previewSrc || vPreviewSrc)) {
+    if (previewSrc) { stopPreview(); genPreview() } else { stopVPreview(); genVPreview() }
+  }
+}
+$('upb').addEventListener('mousedown', e => { e.stopPropagation(); opDrag = true; $('upb').classList.add('dragging'); upbSeek(e); updateProgDisplay(); seekRestart() })
+document.addEventListener('mousemove', e => { if (opDrag) { e.preventDefault(); upbSeek(e); updateProgDisplay() } })
+document.addEventListener('mouseup', () => { if (opDrag) { seekRestart() }; $('upb').classList.remove('dragging'); opDrag = false })
+$('upb').addEventListener('touchstart', e => { e.stopPropagation(); opDrag = true; $('upb').classList.add('dragging'); upbSeek(e.touches[0]); updateProgDisplay(); seekRestart() })
+document.addEventListener('touchmove', e => { if (opDrag) { e.preventDefault(); upbSeek(e.touches[0]); updateProgDisplay() } })
+document.addEventListener('touchend', () => { if (opDrag) { seekRestart() }; $('upb').classList.remove('dragging'); opDrag = false })
 function upbSeek(e) {
   let op = $('op'), dur = op.duration
   if (!dur || !isFinite(dur) || dur <= 0) { dur = audioBuf ? audioBuf.duration / audioBuf.sampleRate : 0 }
