@@ -220,7 +220,7 @@ $('bps').oninput = () => {
   if (nums.length === 1 && nums[0] > 0 && obpm) { let p = Math.round(nums[0] / obpm * 100); if (p >= 30 && p <= 150) { $('pct').value = p; $('pctv').textContent = p + '%' } }
 }
 let sm = document.querySelectorAll('#sm button'); let am = document.querySelectorAll('#am button')
-sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none' })
+sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none'; if (previewSrc || previewTimer) stopPreview(); $('pv').textContent = '▶ 试听'; $('pv').disabled = false; $('pv2').textContent = '▶ 试听'; $('pv2').disabled = false })
 am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none'; if (b.dataset.m === 'inst' && audioBuf && !vPreviewSrc && !vPreviewTimer) toggleVocalPreview() })
 
 let vPreviewSrc = null; let vPreviewTimer = null; let vPreviewVer = 0; let vStartTime = 0
