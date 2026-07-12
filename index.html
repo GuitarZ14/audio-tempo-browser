@@ -203,7 +203,7 @@ function startProgTimer() {
         let m = document.querySelector('#sm .act').dataset.m
         let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
         if (t && t >= 20) {
-          let origCur = cur * obpm / t
+          let origCur = cur * t / obpm
           setProg(Math.min(100, origCur / dur * 100));
           $('utm').textContent = fmt(origCur) + ' / ' + fmt(dur)
           if (origCur >= dur && dur > 0) { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
