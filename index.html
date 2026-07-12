@@ -172,7 +172,7 @@ $('gi').onchange = e => { let f = e.target.files[0]; if (f) processFile(f) }
   ul.addEventListener('drop', e => { e.preventDefault(); let f = e.dataTransfer.files[0]; if (f) processFile(f) })
 })(document.querySelector('.ul'))
 document.querySelectorAll('#uic,#utx,#unt').forEach(el => el.addEventListener('click', () => { if (!$('fi').style.display || $('fi').style.display === 'none') $('gi').click() }))
-let previewSrc = null; let previewTimer = null; let previewVer = 0; let pStartTime = 0
+let previewSrc = null; let previewTimer = null; let previewVer = 0; let pStartTime = 0; let previewT = 0
 let lastStretched = null, lastRatio = 0
 $('pct').oninput = () => {
   let v = parseInt($('pct').value); $('pctv').textContent = v + '%'
@@ -199,10 +199,8 @@ function startProgTimer() {
     else cur = op.currentTime
     if (dur) {
       if (previewSrc || vPreviewSrc) {
-        let m = document.querySelector('#sm .act').dataset.m
-        let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
-        if (t && t >= 20) {
-          let origCur = cur * t / obpm
+        if (previewT && previewT >= 20) {
+          let origCur = cur * previewT / obpm
           setProg(Math.min(100, origCur / dur * 100));
           $('utm').textContent = fmt(origCur) + ' / ' + fmt(dur)
           if (origCur >= dur && dur > 0) { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
@@ -227,6 +225,7 @@ function genPreview() {
   let m = document.querySelector('#sm .act').dataset.m
   let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
   if (!t || t < 20) return
+  previewT = t
   let opPos = $('op').duration ? $('op').currentTime : 0
   let off = previewSrc ? Math.max(0, ctx.currentTime - pStartTime) : opPos * obpm / t
   previewVer++; let myVer = previewVer
@@ -286,6 +285,7 @@ function genVPreview() {
       let m = document.querySelector('#sm .act').dataset.m
       let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
       if (t && t >= 20) {
+        previewT = t
         let ratio = t / obpm; if (ratio < 0.25) ratio = 0.25; if (ratio > 4) ratio = 4
         processed = timeStretch(processed, ratio)
         off = off * obpm / t
