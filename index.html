@@ -53,6 +53,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .tap:hover{background:rgba(78,205,196,.1)}
 .lb{display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer}
 .lb span{font-size:14px;color:#ccc}
+.pv{display:block;width:100%;margin-top:8px;padding:10px;border-radius:20px;border:1px solid rgba(78,205,196,.4);background:transparent;color:#4ecdc4;font-size:14px;cursor:pointer}
+.pv:hover{background:rgba(78,205,196,.1)}
 </style>
 </head>
 <body>
@@ -92,6 +94,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <input class="ps" type="range" id="pct" min="50" max="200" value="100" step="1">
 <div class="ps-l"><span>50%</span><span id="pctv">100%</span><span>200%</span></div>
 <p style="color:#666;font-size:12px;margin-top:4px">拖动选择原曲速度的百分比</p>
+<button class="pv" id="pv" onclick="togglePreview()">▶ 实时试听（变调）</button>
 </div>
 <button class="bn" id="go">🎧 生成伴奏</button>
 <div class="st" id="st"><p id="stx">处理中...</p><div class="pb"><div class="pb-bar" id="pbb"></div></div></div>
@@ -147,7 +150,23 @@ $('gi').onchange = e => { let f = e.target.files[0]; if (f) processFile(f) }
   ul.addEventListener('dragleave', () => { ul.style.borderColor = '' })
   ul.addEventListener('drop', e => { e.preventDefault(); ul.style.borderColor = ''; let f = e.dataTransfer.files[0]; if (f) processFile(f) })
 })(document.querySelector('.ul'))
-$('pct').oninput = () => { let v = parseInt($('pct').value); $('pctv').textContent = v + '%'; if (obpm) $('bps').value = Math.round(obpm * v / 100) }
+let previewSrc = null
+$('pct').oninput = () => {
+  let v = parseInt($('pct').value); $('pctv').textContent = v + '%'
+  if (obpm) $('bps').value = Math.round(obpm * v / 100)
+  if (previewSrc) previewSrc.playbackRate.value = v / 100
+}
+function togglePreview() {
+  if (previewSrc) { previewSrc.stop(); previewSrc = null; $('pv').textContent = '▶ 实时试听（变调）'; return }
+  if (!audioBuf) { err('请先选择音频'); return }
+  let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
+  let pct = parseInt($('pct').value) / 100
+  previewSrc = ctx.createBufferSource()
+  previewSrc.buffer = audioBuf; previewSrc.playbackRate.value = pct
+  previewSrc.connect(ctx.destination)
+  previewSrc.start(); previewSrc.onended = () => { previewSrc = null; $('pv').textContent = '▶ 实时试听（变调）' }
+  $('pv').textContent = '⏹ 停止试听'
+}
 $('bps').oninput = () => {
   let nums = $('bps').value.trim().split(/[\s,，、]+/).map(Number).filter(n => !isNaN(n))
   if (nums.length === 1 && nums[0] > 0 && obpm) { let p = Math.round(nums[0] / obpm * 100); if (p >= 50 && p <= 200) { $('pct').value = p; $('pctv').textContent = p + '%' } }
