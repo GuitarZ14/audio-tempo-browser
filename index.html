@@ -140,7 +140,7 @@ function updateSliderDots() {
   }
   pct.style.backgroundImage = dots.join(','); pct.style.backgroundRepeat = 'no-repeat'
   if (audioBuf && obpm && bw) {
-    let mid = Math.round((20 + obpm) / 2), f = (mid - 20) / (obpm - 20), px = 10 + (bw - tw) * f
+    let mid = Math.round(obpm / 2), f = (mid - 20) / (obpm - 20), px = 10 + (bw - tw) * f
     bps.style.backgroundImage = 'radial-gradient(circle at ' + px + 'px 50%,#94a3b8 2.5px,transparent 2.5px)'; bps.style.backgroundRepeat = 'no-repeat'
   }
 }
@@ -247,7 +247,7 @@ $('bps').oninput = () => {
 }
 $('bps').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸') genPreview() }
 let sm = document.querySelectorAll('#sm button'); let am = document.querySelectorAll('#am button')
-sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none'; if (audioBuf && $('upb-btn').textContent === '⏸') genPreview() })
+sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none'; updateSliderDots(); if (audioBuf && $('upb-btn').textContent === '⏸') genPreview() })
 am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none'; if (audioBuf && $('upb-btn').textContent === '⏸') { if (b.dataset.m === 'inst') genVPreview(); else genPreview() } })
 
 let vPreviewSrc = null; let vPreviewTimer = null; let vPreviewVer = 0; let vStartTime = 0; let progTimer = null
