@@ -132,17 +132,34 @@ $('goBtn').onclick = async () => {
       setT(`正在处理 ${tgt} BPM...`); setP(10 + 80 / targets.length * i)
 
       let ratio = origBpm / tgt
-      let newLen = Math.round(len * ratio)
+      let ws = Math.floor(sr * 0.05)
+      let hop = Math.floor(ws * 0.5)
+      let oHop = Math.round(hop * ratio)
+      let newLen = Math.round(len / ratio)
       let out = actx.createBuffer(ch, newLen, sr)
       for (let c = 0; c < ch; c++) {
         let inp = buf.getChannelData(c)
         let oup = out.getChannelData(c)
-        for (let j = 0; j < newLen; j++) {
-          let pos = j / ratio
-          let idx = Math.floor(pos)
-          let frac = pos - idx
-          if (idx + 1 < len) oup[j] = inp[idx] * (1 - frac) + inp[idx + 1] * frac
-          else if (idx < len) oup[j] = inp[idx]
+        let pos = 0, oPos = 0
+        while (pos + ws < len && oPos + ws < newLen) {
+          for (let j = 0; j < ws; j++) {
+            let win = 0.5 * (1 - Math.cos(2 * Math.PI * j / ws))
+            if (oPos + j < newLen) oup[oPos + j] += inp[pos + j] * win
+          }
+          let best = 0
+          if (pos + hop * 2 < len) {
+            let bestCorr = -1
+            for (let s = -Math.floor(ws * 0.1); s < Math.floor(ws * 0.1); s++) {
+              let corr = 0, nrm = 0, n = Math.min(ws, len - pos - hop - s, newLen - oPos - oHop)
+              for (let j = 0; j < n; j++) {
+                corr += inp[pos + hop + j] * inp[pos + hop + j + s]
+                nrm += inp[pos + hop + j] * inp[pos + hop + j]
+              }
+              if (nrm > 0) { corr /= nrm; if (corr > bestCorr) { bestCorr = corr; best = s } }
+            }
+          }
+          pos += hop + best
+          oPos += oHop
         }
       }
 
