@@ -100,13 +100,14 @@ $('go').onclick = async () => {
         th = th * 0.9 + e * 0.1
       }
     }
-    if (peaks.length > 3) {
+    if (peaks.length > 4) {
       let ints = []
-      for (let i = 1; i < peaks.length; i++) ints.push(peaks[i] - peaks[0])
+      for (let i = 1; i < peaks.length; i++) ints.push(peaks[i] - peaks[i-1])
       if (ints.length > 3) {
-        let est = Math.round(60 / (ints[Math.floor(ints.length / 2)] / sr))
-        if (est > 20 && est < 300) obpm = est
-        if (obpm > 160) obpm = Math.round(obpm / 2)
+        ints.sort((a, b) => a - b)
+        let mid = ints[Math.floor(ints.length / 2)]
+        let est = Math.round(60 / (mid / sr))
+        if (est > 40 && est < 200) obpm = est
       }
     }
 
