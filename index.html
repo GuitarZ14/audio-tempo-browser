@@ -199,7 +199,7 @@ function genPreview() {
       if (previewSrc) { try { previewSrc.stop() } catch(e) {} previewSrc = null }
       if (myVer !== previewVer) return
       let ratio = t / obpm
-      let stretched = ratio > 0.94 && ratio < 1.06 ? audioBuf : timeStretch(audioBuf, ratio)
+      let stretched = timeStretch(audioBuf, ratio)
       if (myVer !== previewVer) return
       let src = ctx.createBufferSource()
       src.buffer = stretched; src.connect(ctx.destination)
@@ -419,8 +419,7 @@ function timeStretch(buf, sFactor) {
   let newLen = Math.round(ln / sFactor)
   let out = actx.createBuffer(ch, newLen, sr)
   let fSize = 2048, aHop = 512, sHop = Math.round(aHop / sFactor)
-  let doSearch = Math.abs(sFactor - 1) > 0.12
-  let srchD = doSearch ? Math.min(Math.round(aHop * 0.2), 50) : 0, srchL = 60
+  let srchD = Math.min(Math.round(aHop * 0.2), 50), srchL = 60
   let win = new Float32Array(fSize)
   for (let j = 0; j < fSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fSize))
 
@@ -434,7 +433,7 @@ function timeStretch(buf, sFactor) {
     let idealA = 0, sPos = 0
     while (idealA + fSize <= ln && sPos + fSize <= newLen) {
       let bestA = idealA
-      if (sPos > 0 && doSearch) {
+      if (sPos > 0) {
         let olap = Math.min(fSize - sHop, sPos, srchL)
         if (olap > 0) {
           let bestScore = -Infinity
