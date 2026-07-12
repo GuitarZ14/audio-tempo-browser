@@ -81,8 +81,7 @@ let $ = id => document.getElementById(id)
 
 function getActx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx }
 
-$('gi').onchange = async e => {
-  let f = e.target.files[0]
+async function processFile(f) {
   if (!f) return
   if (f.size > 100e6) { err('文件过大（限 100MB）'); return }
   file = f; bn = f.name.replace(/\.[^.]+$/, '')
@@ -96,6 +95,12 @@ $('gi').onchange = async e => {
     if (bpm) { obpm = bpm; $('bpmi').textContent = '⏱ 原始速度: ' + obpm + ' BPM'; $('bpmi').classList.add('sh') }
   } catch(e) { console.error('BPM 检测失败', e) }
 }
+
+$('gi').onchange = e => { let f = e.target.files[0]; if (f) processFile(f) }
+;(ul => { ul.addEventListener('dragover', e => { e.preventDefault(); ul.style.borderColor = '#4ecdc4' })
+  ul.addEventListener('dragleave', () => { ul.style.borderColor = '' })
+  ul.addEventListener('drop', e => { e.preventDefault(); ul.style.borderColor = ''; let f = e.dataTransfer.files[0]; if (f) processFile(f) })
+})(document.querySelector('.ul'))
 
 $('go').onclick = async () => {
   if (!file) { err('请先选择音频'); return }
