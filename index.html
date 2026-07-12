@@ -79,6 +79,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="fn" id="fn"></div>
 <div class="bpmi" id="bpmi"></div>
 <button class="tap" id="tap" onclick="tapTempo()">👆 跟着节拍点按测速</button>
+<div class="card" id="opc" style="display:none">
+<div style="display:flex;align-items:center;gap:10px"><button id="opb" class="pb2" onclick="opPlay()" style="flex:none;width:auto;padding:6px 16px;border-radius:20px">▶ 播放原曲</button><div class="ap-w" style="flex:1"><div class="ap-pb" id="oppb" onclick="osk(event)"><div class="ap-pb-in" id="oppi"></div></div><div class="ap-tm" id="optm">0:00 / 0:00</div></div></div>
+<audio id="op" hidden></audio>
+</div>
 </div>
 <div class="card">
 <div style="font-size:14px;color:#aaa;margin-bottom:10px">速度模式</div>
@@ -139,6 +143,8 @@ async function processFile(f) {
     let bpm = detectBpm(buf)
     if (bpm) { obpm = bpm; let sig = detectSig(buf, bpm) || '4/4'; $('bpmi').textContent = '⏱ 原始速度: ' + obpm + ' BPM · ' + sig; $('bpmi').classList.add('sh')
       let p = Math.round(100); $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').value = obpm }
+    let op = $('op'); if (op.src) URL.revokeObjectURL(op.src)
+    op.src = URL.createObjectURL(f); $('opc').style.display = 'block'; $('optm').textContent = '0:00 / 0:00'; $('oppi').style.width = '0%'
   } catch(e) { console.error('BPM 检测失败', e) }
 }
 
@@ -217,7 +223,7 @@ let sm = document.querySelectorAll('#sm button'); let am = document.querySelecto
 sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none' })
 am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none'; if (b.dataset.m === 'inst' && audioBuf && !vPreviewSrc && !vPreviewTimer) toggleVocalPreview() })
 
-let vPreviewSrc = null; let vPreviewTimer = null; let vPreviewVer = 0
+let vPreviewSrc = null; let vPreviewTimer = null; let vPreviewVer = 0; let vStartTime = 0
 $('vra').onchange = () => { if (vPreviewSrc || vPreviewTimer) genVPreview() }
 function stopVPrev() {
   if (vPreviewTimer) { clearTimeout(vPreviewTimer); vPreviewTimer = null }
@@ -228,18 +234,20 @@ function genVPreview() {
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   if (audioBuf.numberOfChannels < 2) { err('单声道音频无法去人声'); return }
   if (vPreviewTimer) clearTimeout(vPreviewTimer)
+  let off = vPreviewSrc ? Math.max(0, ctx.currentTime - vStartTime) : 0
   $('pv3').textContent = '⏳ 处理中...'; $('pv3').disabled = true; vPreviewVer++; let myVer = vPreviewVer
   vPreviewTimer = setTimeout(async () => {
     vPreviewTimer = null; if (myVer !== vPreviewVer) return
     try {
-      stopVPrev()
       if (myVer !== vPreviewVer) return
       let processed = removeCenter(audioBuf, parseInt($('vra').value) / 100)
+      if (myVer !== vPreviewVer) return
+      stopVPrev()
       if (myVer !== vPreviewVer) return
       let src = ctx.createBufferSource()
       src.buffer = processed; src.connect(ctx.destination)
       src.onended = () => { if (vPreviewSrc === src) { vPreviewSrc = null; $('pv3').textContent = '🔊 试听去人声'; $('pv3').disabled = false } }
-      src.start(); vPreviewSrc = src
+      src.start(0, off); vPreviewSrc = src; vStartTime = ctx.currentTime - off
       $('pv3').textContent = '⏹ 停止'; $('pv3').disabled = false
     } catch(e) { $('pv3').textContent = '🔊 试听去人声'; $('pv3').disabled = false }
   }, 100)
@@ -386,6 +394,22 @@ $('ap').addEventListener('ended', () => {
   $('apw').classList.remove('sh')
   document.querySelectorAll('#rl .pb2').forEach(b => b.textContent = '▶ 播放')
 })
+
+$('op').addEventListener('timeupdate', () => {
+  let op = $('op')
+  if (op.duration) { $('oppi').style.width = (op.currentTime / op.duration * 100) + '%'; $('optm').textContent = fmt(op.currentTime) + ' / ' + fmt(op.duration) }
+})
+function osk(e) {
+  let op = $('op'); if (!op.duration) return
+  let rect = e.currentTarget.getBoundingClientRect()
+  op.currentTime = ((e.clientX - rect.left) / rect.width) * op.duration
+}
+function opPlay() {
+  let op = $('op'), b = $('opb')
+  if (op.paused) { op.play(); b.textContent = '⏸ 暂停' }
+  else { op.pause(); b.textContent = '▶ 播放原曲' }
+}
+$('op').addEventListener('ended', () => { $('opb').textContent = '▶ 播放原曲' })
 
 function removeCenter(buf, amt) {
   if (buf.numberOfChannels < 2) return buf
