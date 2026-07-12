@@ -189,7 +189,7 @@ function genPreview() {
   let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
   if (!t || t < 20) return
   let opPos = $('op').duration ? $('op').currentTime : 0
-  let off = opPos * obpm / t
+  let off = previewSrc ? Math.max(0, ctx.currentTime - pStartTime) : opPos * obpm / t
   previewVer++; let myVer = previewVer
   previewTimer = setTimeout(async () => {
     previewTimer = null
@@ -225,7 +225,7 @@ function genVPreview() {
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   if (audioBuf.numberOfChannels < 2) { err('单声道音频无法去人声'); return }
   if (vPreviewTimer) clearTimeout(vPreviewTimer)
-  let off = $('op').duration ? $('op').currentTime : 0
+  let off = vPreviewSrc ? Math.max(0, ctx.currentTime - vStartTime) : ($('op').duration ? $('op').currentTime : 0)
   try { if (!$('op').paused) { $('op').pause() } } catch(e) {}
   stopPreview()
   vPreviewVer++; let myVer = vPreviewVer
