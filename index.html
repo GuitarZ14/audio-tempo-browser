@@ -98,8 +98,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </div>
 <div id="sp" style="display:none">
 <span style="font-size:14px;color:#aaa">目标速度（百分比）</span>
-  <input class="ps" type="range" id="pct" min="30" max="150" step="10" list="pct-ticks">
-  <datalist id="pct-ticks"><option value="30"><option value="40"><option value="50"><option value="60"><option value="70"><option value="80"><option value="90"><option value="100"><option value="110"><option value="120"><option value="130"><option value="140"><option value="150"></datalist>
+  <input class="ps" type="range" id="pct" min="30" max="150">
 <div class="ps-l"><span>30%</span><span>150%</span></div>
 <div style="text-align:center;font-size:14px;color:#4ecdc4;font-weight:600;margin-top:2px" id="pctv">--</div>
   <p style="color:#666;font-size:12px;margin-top:4px">拖动选择原曲速度的百分比</p>
@@ -130,6 +129,22 @@ let $ = id => document.getElementById(id)
 
 function getActx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx }
 
+function updateSliderDots() {
+  let tw = 20 // thumb width
+  let pct = $('pct'), bps = $('bps')
+  let pw = pct.offsetWidth, bw = bps.offsetWidth
+  let dots = []
+  for (let v = 30; v <= 150; v += 10) {
+    let f = (v - 30) / 120, px = 10 + (pw - tw) * f
+    dots.push('radial-gradient(circle at ' + px + 'px 50%,#94a3b8 2.5px,transparent 2.5px)')
+  }
+  pct.style.backgroundImage = dots.join(','); pct.style.backgroundRepeat = 'no-repeat'
+  if (audioBuf && obpm && bw) {
+    let mid = Math.round((20 + obpm) / 2), f = (mid - 20) / (obpm - 20), px = 10 + (bw - tw) * f
+    bps.style.backgroundImage = 'radial-gradient(circle at ' + px + 'px 50%,#94a3b8 2.5px,transparent 2.5px)'; bps.style.backgroundRepeat = 'no-repeat'
+  }
+}
+
 async function processFile(f) {
   if (!f) return
   if (f.size > 100e6) { err('文件过大（限 100MB）'); return }
@@ -143,10 +158,7 @@ async function processFile(f) {
     let bpm = detectBpm(buf)
     if (bpm) { obpm = bpm; obSig = detectSig(buf, bpm) || '4/4'; $('bpmn').textContent = '⏱ ' + obpm + ' BPM · ' + obSig
     } else { obpm = 120; $('bpmn').textContent = 'BPM 检测失败，默认 120' }
-    $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').max = obpm; $('bps').value = obpm; $('bpsv').textContent = obpm
-    let mid = Math.round((20 + obpm) / 2); $('bps').setAttribute('list', 'bps-ticks')
-    let dl = document.getElementById('bps-ticks') || (() => { let d = document.createElement('datalist'); d.id = 'bps-ticks'; $('bps').parentNode.appendChild(d); return d })()
-    dl.innerHTML = '<option value="' + mid + '">'
+    $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').max = obpm; $('bps').value = obpm; $('bpsv').textContent = obpm; updateSliderDots()
     let op = $('op'); if (op.src) URL.revokeObjectURL(op.src)
     op.src = URL.createObjectURL(f)
   } catch(e) { console.error('BPM 检测失败', e); $('bpmn').textContent = 'BPM 检测失败' }
@@ -224,7 +236,7 @@ function genPreview() {
 $('bps').oninput = () => {
   let v = parseInt($('bps').value)
   if (audioBuf) { $('bpsv').textContent = v } else return
-  if (obpm) { let p = Math.round(v / obpm * 100); p = Math.round(p / 10) * 10; p = Math.max(30, Math.min(150, p)); $('pct').value = p; $('pctv').textContent = p + '%' }
+  if (obpm) { let p = Math.round(v / obpm * 100); $('pct').value = Math.max(30, Math.min(150, p)); $('pctv').textContent = $('pct').value + '%' }
 }
 $('bps').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸') genPreview() }
 let sm = document.querySelectorAll('#sm button'); let am = document.querySelectorAll('#am button')
@@ -571,6 +583,8 @@ function stx(t) { $('stx').textContent = t }
 function pb(p) { $('pbb').style.width = p + '%' }
 function err(m) { $('er').textContent = m; $('er').style.display = 'block' }
 function hideErr() { $('er').style.display = 'none' }
+setTimeout(updateSliderDots, 100)
+window.addEventListener('resize', updateSliderDots)
 </script>
 </body>
 </html>
