@@ -439,13 +439,16 @@ function stopCountIn() { if (countInTimer) { clearTimeout(countInTimer); countIn
 function playCountIn() {
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   stopCountIn(); $('upb-btn').textContent = '⏸'; stopProgTimer()
-  let beats = getCountInBeats(), interval = 60 / obpm
+  let m = document.querySelector('#sm .act').dataset.m
+  let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
+  if (!t || t < 20) t = obpm
+  let beats = getCountInBeats(), interval = 60 / t
   for (let i = 0; i < beats; i++) {
-    let t = ctx.currentTime + i * interval
+    let t2 = ctx.currentTime + i * interval
     let osc = ctx.createOscillator(), gain = ctx.createGain()
     osc.frequency.value = i === 0 ? 1200 : 880
-    gain.gain.setValueAtTime(0.6, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06)
-    osc.connect(gain).connect(ctx.destination); osc.start(t); osc.stop(t + 0.06)
+    gain.gain.setValueAtTime(0.6, t2); gain.gain.exponentialRampToValueAtTime(0.001, t2 + 0.06)
+    osc.connect(gain).connect(ctx.destination); osc.start(t2); osc.stop(t2 + 0.06)
   }
   setProg(0); $('utm').textContent = '预备 ' + beats + ' 拍'
   countInTimer = setTimeout(() => { countInTimer = null; startPlayback() }, beats * interval * 1000 + 100)
