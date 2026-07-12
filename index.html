@@ -237,7 +237,7 @@ function genPreview() {
       previewTimer = null
       if (myVer !== previewVer) return
       try {
-        let stretched = timeStretch(audioBuf, ratio)
+        let stretched = timeStretchFast(audioBuf, ratio)
         if (myVer !== previewVer) return
         lastStretched = stretched; lastRatio = ratio
         startFromBuf(stretched, off, myVer, ctx)
@@ -288,7 +288,7 @@ function genVPreview() {
       if (t && t >= 20) {
         previewT = t
         let ratio = t / obpm; if (ratio < 0.25) ratio = 0.25; if (ratio > 4) ratio = 4
-        processed = timeStretch(processed, ratio)
+        processed = timeStretchFast(processed, ratio)
         if (vPreviewSrc) off = off * oldPT / t
         else off = off * obpm / t
       }
