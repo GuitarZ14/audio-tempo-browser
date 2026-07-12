@@ -71,7 +71,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="nt" id="unt">支持 MP3 / WAV / M4A</div>
 <div class="fi" id="fi" style="display:none">
 <div class="ap-pb" id="upb" onclick="event.stopPropagation();upbSeek(event)" style="margin-top:8px"><div class="ap-pb-in" id="upi"></div></div>
-<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><button id="upb-btn" class="pb2" onclick="event.stopPropagation();opPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:3px 10px;border-radius:12px;font-size:11px">更换</button></div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:3px 10px;border-radius:12px;font-size:11px">更换</button></div>
 <div style="font-size:11px;color:#888;margin-top:2px;text-align:left" id="bpmn"></div>
 </div>
 </div>
@@ -153,23 +153,43 @@ $('pct').oninput = () => {
   let v = parseInt($('pct').value); $('pctv').textContent = v + '%'
   if (obpm) { $('bpsv').textContent = Math.round(obpm * v / 100); $('bps').value = Math.round(obpm * v / 100) }
 }
-$('pct').onchange = () => { if (audioBuf) genPreview() }
+$('pct').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸') genPreview() }
 function stopPreview() {
   if (previewTimer) { clearTimeout(previewTimer); previewTimer = null }
   if (previewSrc) { try { previewSrc.stop() } catch(e) {} previewSrc = null }
 }
+function stopVPreview() {
+  if (vPreviewTimer) { clearTimeout(vPreviewTimer); vPreviewTimer = null }
+  if (vPreviewSrc) { try { vPreviewSrc.stop() } catch(e) {} vPreviewSrc = null }
+}
+function stopAllPreviews() { stopPreview(); stopVPreview() }
+function startProgTimer() {
+  stopProgTimer()
+  progTimer = setInterval(() => {
+    let op = $('op'), dur = op.duration || 0, cur = 0
+    if (previewSrc) cur = Math.max(0, (actx ? actx.currentTime : 0) - pStartTime)
+    else if (vPreviewSrc) cur = Math.max(0, (actx ? actx.currentTime : 0) - vStartTime)
+    else cur = op.currentTime
+    if (dur) {
+      $('upi').style.width = (cur / dur * 100) + '%'
+      $('utm').textContent = fmt(cur) + ' / ' + fmt(dur)
+    }
+    if (cur >= dur && dur > 0) { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
+  }, 200)
+}
+function stopProgTimer() { if (progTimer) { clearInterval(progTimer); progTimer = null } }
+function playbackEnded() { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
 function genPreview() {
   if (!audioBuf) return
   if (previewTimer) clearTimeout(previewTimer)
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
-  try { if (!$('op').paused) { $('op').pause(); $('upb-btn').textContent = '▶' } } catch(e) {}
-  if (vPreviewSrc) { try { vPreviewSrc.stop() } catch(e) {} vPreviewSrc = null }
-  if (vPreviewTimer) { clearTimeout(vPreviewTimer); vPreviewTimer = null }
+  try { if (!$('op').paused) { $('op').pause() } } catch(e) {}
+  stopVPreview()
   let m = document.querySelector('#sm .act').dataset.m
   let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
   if (!t || t < 20) return
   let opPos = $('op').duration ? $('op').currentTime : 0
-  let off = previewSrc ? Math.max(0, ctx.currentTime - pStartTime) : opPos * obpm / t
+  let off = opPos * obpm / t
   previewVer++; let myVer = previewVer
   previewTimer = setTimeout(async () => {
     previewTimer = null
@@ -183,8 +203,9 @@ function genPreview() {
       if (myVer !== previewVer) return
       let src = ctx.createBufferSource()
       src.buffer = stretched; src.connect(ctx.destination)
-      src.onended = () => { if (previewSrc === src) { previewSrc = null } }
+      src.onended = () => { if (previewSrc === src) { previewSrc = null; playbackEnded() } }
       src.start(0, off); previewSrc = src; pStartTime = ctx.currentTime - off
+      $('upb-btn').textContent = '⏸'; startProgTimer()
     } catch(e) {}
   }, 50)
 }
@@ -192,22 +213,21 @@ $('bps').oninput = () => {
   let v = parseInt($('bps').value); $('bpsv').textContent = v
   if (obpm) { let p = Math.round(v / obpm * 100); $('pct').value = Math.max(30, Math.min(150, p)); $('pctv').textContent = $('pct').value + '%' }
 }
-$('bps').onchange = () => { if (audioBuf) genPreview() }
+$('bps').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸') genPreview() }
 let sm = document.querySelectorAll('#sm button'); let am = document.querySelectorAll('#am button')
-sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none'; stopPreview(); if (audioBuf) genPreview() })
-am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none'; if (b.dataset.m === 'inst' && audioBuf) { if (previewSrc) { try { previewSrc.stop() } catch(e) {} previewSrc = null }; if (previewTimer) { clearTimeout(previewTimer); previewTimer = null }; genVPreview() } })
+sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none'; if (audioBuf && $('upb-btn').textContent === '⏸') genPreview() })
+am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none'; if (audioBuf && $('upb-btn').textContent === '⏸') { if (b.dataset.m === 'inst') genVPreview(); else genPreview() } })
 
-let vPreviewSrc = null; let vPreviewTimer = null; let vPreviewVer = 0; let vStartTime = 0
-$('vra').onchange = () => { if (audioBuf) genVPreview() }
+let vPreviewSrc = null; let vPreviewTimer = null; let vPreviewVer = 0; let vStartTime = 0; let progTimer = null
+$('vra').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸') genVPreview() }
 function genVPreview() {
   if (!audioBuf) return
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   if (audioBuf.numberOfChannels < 2) { err('单声道音频无法去人声'); return }
   if (vPreviewTimer) clearTimeout(vPreviewTimer)
-  let off = vPreviewSrc ? Math.max(0, ctx.currentTime - vStartTime) : ($('op').duration ? $('op').currentTime : 0)
-  try { if (!$('op').paused) { $('op').pause(); $('upb-btn').textContent = '▶' } } catch(e) {}
-  if (previewSrc) { try { previewSrc.stop() } catch(e) {} previewSrc = null }
-  if (previewTimer) { clearTimeout(previewTimer); previewTimer = null }
+  let off = $('op').duration ? $('op').currentTime : 0
+  try { if (!$('op').paused) { $('op').pause() } } catch(e) {}
+  stopPreview()
   vPreviewVer++; let myVer = vPreviewVer
   vPreviewTimer = setTimeout(async () => {
     vPreviewTimer = null; if (myVer !== vPreviewVer) return
@@ -219,8 +239,9 @@ function genVPreview() {
       if (myVer !== vPreviewVer) return
       let src = ctx.createBufferSource()
       src.buffer = processed; src.connect(ctx.destination)
-      src.onended = () => { if (vPreviewSrc === src) { vPreviewSrc = null } }
+      src.onended = () => { if (vPreviewSrc === src) { vPreviewSrc = null; playbackEnded() } }
       src.start(0, off); vPreviewSrc = src; vStartTime = ctx.currentTime - off
+      $('upb-btn').textContent = '⏸'; startProgTimer()
     } catch(e) {}
   }, 100)
 }
@@ -353,28 +374,34 @@ $('ap').addEventListener('ended', () => {
   document.querySelectorAll('#rl .pb2').forEach(b => b.textContent = '▶ 播放')
 })
 
-$('op').addEventListener('timeupdate', () => {
-  let op = $('op'), p = op.duration ? op.currentTime / op.duration * 100 : 0, t = fmt(op.currentTime) + ' / ' + fmt(op.duration)
-  if (op.duration) { $('upi').style.width = p + '%'; $('utm').textContent = t }
-})
-let opDrag = false
-$('upb').addEventListener('mousedown', e => { opDrag = true; upbSeek(e) })
-document.addEventListener('mousemove', e => { if (opDrag) { e.preventDefault(); upbSeek(e) } })
-document.addEventListener('mouseup', () => { opDrag = false })
-$('upb').addEventListener('touchstart', e => { opDrag = true; upbSeek(e.touches[0]) })
-document.addEventListener('touchmove', e => { if (opDrag) { e.preventDefault(); upbSeek(e.touches[0]) } })
-document.addEventListener('touchend', () => { opDrag = false })
+let opDrag = false, opDragSeeked = false
+$('upb').addEventListener('mousedown', e => { opDrag = true; opDragSeeked = false; upbSeek(e); updateProgDisplay() })
+document.addEventListener('mousemove', e => { if (opDrag) { e.preventDefault(); upbSeek(e); updateProgDisplay(); opDragSeeked = true } })
+document.addEventListener('mouseup', () => { if (opDrag && opDragSeeked && $('upb-btn').textContent === '⏸' && (previewSrc || vPreviewSrc)) { if (previewSrc) { stopPreview(); genPreview() } else { stopVPreview(); genVPreview() } }; opDrag = false })
+$('upb').addEventListener('touchstart', e => { opDrag = true; opDragSeeked = false; upbSeek(e.touches[0]); updateProgDisplay() })
+document.addEventListener('touchmove', e => { if (opDrag) { e.preventDefault(); upbSeek(e.touches[0]); updateProgDisplay(); opDragSeeked = true } })
+document.addEventListener('touchend', () => { if (opDrag && opDragSeeked && $('upb-btn').textContent === '⏸' && (previewSrc || vPreviewSrc)) { if (previewSrc) { stopPreview(); genPreview() } else { stopVPreview(); genVPreview() } }; opDrag = false })
 function upbSeek(e) {
   let op = $('op'); if (!op.duration) return
   let rect = $('upb').getBoundingClientRect()
   op.currentTime = ((e.clientX - rect.left) / rect.width) * op.duration
 }
-function opPlay() {
-  let op = $('op'), b = $('upb-btn')
-  if (op.paused) { op.play(); b.textContent = '⏸' }
-  else { op.pause(); b.textContent = '▶' }
+function updateProgDisplay() {
+  let op = $('op')
+  if (op.duration) { $('upi').style.width = (op.currentTime / op.duration * 100) + '%'; $('utm').textContent = fmt(op.currentTime) + ' / ' + fmt(op.duration) }
 }
-$('op').addEventListener('ended', () => { $('upb-btn').textContent = '▶' })
+function unifiedPlay() {
+  if (!audioBuf) return
+  let b = $('upb-btn'), op = $('op')
+  if (b.textContent === '⏸') {
+    stopAllPreviews(); try { if (!op.paused) op.pause() } catch(e) {}
+    stopProgTimer(); b.textContent = '▶'; return
+  }
+  stopAllPreviews(); try { if (!op.paused) op.pause() } catch(e) {}; stopProgTimer()
+  if (document.querySelector('#am .act').dataset.m === 'inst') { genVPreview() }
+  else { genPreview() }
+}
+$('op').addEventListener('ended', playbackEnded)
 
 function removeCenter(buf, amt) {
   if (buf.numberOfChannels < 2) return buf
