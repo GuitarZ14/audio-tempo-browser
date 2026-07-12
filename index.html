@@ -49,6 +49,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .ps::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;background:#4ecdc4;cursor:pointer}
 .ps::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#4ecdc4;cursor:pointer;border:none}
 .ps-l{display:flex;justify-content:space-between;color:#888;font-size:12px}
+.tap{display:block;margin:8px auto 0;padding:8px 24px;border-radius:20px;border:1px solid rgba(78,205,196,.4);background:transparent;color:#4ecdc4;font-size:14px;cursor:pointer}
+.tap:hover{background:rgba(78,205,196,.1)}
 </style>
 </head>
 <body>
@@ -67,6 +69,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <input type="file" id="gi" accept=".mp3,.wav,.m4a,.aac,.ogg" hidden>
 <div class="fn" id="fn"></div>
 <div class="bpmi" id="bpmi"></div>
+<button class="tap" id="tap" onclick="tapTempo()">👆 跟着节拍点按测速</button>
 </div>
 <div class="card">
 <span style="font-size:14px;color:#aaa">目标速度（BPM）</span>
@@ -105,6 +108,27 @@ async function processFile(f) {
     if (bpm) { obpm = bpm; let sig = detectSig(buf, bpm) || '4/4'; $('bpmi').textContent = '⏱ 原始速度: ' + obpm + ' BPM · ' + sig; $('bpmi').classList.add('sh')
       let p = Math.round(100); $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').value = obpm }
   } catch(e) { console.error('BPM 检测失败', e) }
+}
+
+let tapTaps = []
+function tapTempo() {
+  let n = Date.now(); tapTaps.push(n)
+  if (tapTaps.length > 12) tapTaps.shift()
+  if (tapTaps.length >= 3) {
+    let ints = []
+    for (let i = 1; i < tapTaps.length; i++) ints.push(tapTaps[i] - tapTaps[i-1])
+    let avg = ints.reduce((a,b)=>a+b,0) / ints.length
+    let bpm = Math.round(60000 / avg)
+    if (bpm >= 40 && bpm <= 200) {
+      obpm = bpm
+      let sig = ''
+      try { if (audioBuf) sig = ' · ' + (detectSig(audioBuf, obpm) || '?') } catch(e) {}
+      $('bpmi').textContent = '⏱ 原始速度: ' + obpm + ' BPM' + sig; $('bpmi').classList.add('sh')
+      $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').value = obpm
+    }
+    $('tap').textContent = '👆 已检测: ' + bpm + ' BPM'
+    setTimeout(() => { $('tap').textContent = '👆 跟着节拍点按测速' }, 2000)
+  }
 }
 
 $('gi').onchange = e => { let f = e.target.files[0]; if (f) processFile(f) }
