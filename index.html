@@ -159,8 +159,8 @@ function timeStretch(buf, sFactor) {
   let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
   let newLen = Math.round(ln / sFactor)
   let out = actx.createBuffer(ch, newLen, sr)
-  let fSize = 2048, aHop = 512
-  let sHop = Math.round(aHop / sFactor)
+  let fSize = 2048, aHop = 512, sHop = Math.round(aHop / sFactor)
+  let srchD = Math.min(Math.round(aHop * 0.35), 180), srchL = 200
   let win = new Float32Array(fSize)
   for (let j = 0; j < fSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fSize))
 
@@ -170,16 +170,29 @@ function timeStretch(buf, sFactor) {
       for (let j = 0; j < Math.min(ln, newLen); j++) oup[j] = inp[j]
       continue
     }
-    let aPos = 0, sPos = 0
     let nrm = new Float32Array(newLen)
-    while (aPos + fSize <= ln && sPos + fSize <= newLen) {
+    let idealA = 0, sPos = 0
+    while (idealA + fSize <= ln && sPos + fSize <= newLen) {
+      let bestA = idealA
+      if (sPos > 0) {
+        let olap = Math.min(fSize - sHop, sPos, srchL)
+        if (olap > 0) {
+          let bestScore = -Infinity
+          for (let d = -srchD; d <= srchD; d++) {
+            let ca = idealA + d
+            if (ca < 0 || ca + fSize > ln) continue
+            let score = 0
+            for (let j = 0; j < olap; j++) score += inp[ca + j] * oup[sPos + j]
+            if (score > bestScore) { bestScore = score; bestA = ca }
+          }
+        }
+      }
       for (let j = 0; j < fSize; j++) {
         let idx = sPos + j
-        oup[idx] += inp[aPos + j] * win[j]
+        oup[idx] += inp[bestA + j] * win[j]
         nrm[idx] += win[j]
       }
-      aPos += aHop
-      sPos += sHop
+      idealA += aHop; sPos += sHop
     }
     for (let j = 0; j < newLen; j++) if (nrm[j] > 0.001) oup[j] /= nrm[j]
   }
