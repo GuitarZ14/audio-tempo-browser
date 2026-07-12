@@ -151,7 +151,7 @@ async function processFile(f) {
   if (!f) return
   if (f.size > 100e6) { err('文件过大（限 100MB）'); return }
   file = f; bn = f.name.replace(/\.[^.]+$/, '')
-  hideErr(); audioBuf = null; lastStretched = null; lastRatio = 0
+  hideErr(); audioBuf = null
   $('uic').style.display = 'none'; $('utx').style.display = 'none'; $('unt').style.display = 'none'
   $('fi').style.display = 'block'; $('fin').textContent = f.name; $('utm').textContent = '0:00 / 0:00'; setProg(0)
   try {
@@ -172,15 +172,13 @@ $('gi').onchange = e => { let f = e.target.files[0]; if (f) processFile(f) }
   ul.addEventListener('drop', e => { e.preventDefault(); let f = e.dataTransfer.files[0]; if (f) processFile(f) })
 })(document.querySelector('.ul'))
 document.querySelectorAll('#uic,#utx,#unt').forEach(el => el.addEventListener('click', () => { if (!$('fi').style.display || $('fi').style.display === 'none') $('gi').click() }))
-let previewSrc = null; let previewTimer = null; let previewVer = 0; let pStartTime = 0; let previewT = 0
-let lastStretched = null, lastRatio = 0
+let previewSrc = null; let pStartTime = 0; let previewT = 0
 $('pct').oninput = () => {
   let v = parseInt($('pct').value); $('pctv').textContent = v + '%'
   if (audioBuf && obpm) { $('bpsv').textContent = Math.round(obpm * v / 100); $('bps').value = Math.round(obpm * v / 100) }
 }
-$('pct').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸') { if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() } }
+$('pct').onchange = () => { if (!audioBuf || $('upb-btn').textContent !== '⏸') return; if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else updateSpeed() }
 function stopPreview() {
-  if (previewTimer) { clearTimeout(previewTimer); previewTimer = null }
   if (previewSrc) { try { previewSrc.stop() } catch(e) {} previewSrc = null }
 }
 function stopVPreview() {
@@ -215,44 +213,22 @@ function startProgTimer() {
 }
 function setProg(pct) { let v = Math.min(100, Math.max(0, pct)); $('upi').style.width = v + '%'; $('upthumb').style.left = v + '%' }
 function playbackEnded() { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
+function getTargetBPM() {
+  let m = document.querySelector('#sm .act').dataset.m
+  return m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
+}
+function updateSpeed() {
+  let t = getTargetBPM()
+  if (!t || t < 20) return
+  previewT = t; $('op').playbackRate = t / obpm
+}
 function genPreview() {
   if (!audioBuf) return
-  stopCountIn()
-  if (previewTimer) clearTimeout(previewTimer)
-  let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
-  try { if (!$('op').paused) { $('op').pause() } } catch(e) {}
-  stopVPreview()
-  let m = document.querySelector('#sm .act').dataset.m
-  let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
+  stopCountIn(); stopPreview(); stopVPreview()
+  let t = getTargetBPM()
   if (!t || t < 20) return
-  let opPos = $('op').duration ? $('op').currentTime : 0
-  let off = previewSrc ? Math.max(0, ctx.currentTime - pStartTime) * previewT / t : opPos * obpm / t
-  previewT = t
-  previewVer++; let myVer = previewVer
-  let ratio = t / obpm
-  if (Math.abs(ratio - lastRatio) < 0.001 && lastStretched) {
-    startFromBuf(lastStretched, off, myVer, ctx)
-  } else {
-    previewTimer = setTimeout(async () => {
-      previewTimer = null
-      if (myVer !== previewVer) return
-      try {
-        let stretched = timeStretchFast(audioBuf, ratio)
-        if (myVer !== previewVer) return
-        lastStretched = stretched; lastRatio = ratio
-        startFromBuf(stretched, off, myVer, ctx)
-      } catch(e) {}
-    }, 50)
-  }
-}
-function startFromBuf(buf, off, ver, ctx) {
-  if (ver !== previewVer) return
-  let src = ctx.createBufferSource()
-  src.buffer = buf; src.connect(ctx.destination)
-  src.onended = () => { if (previewSrc === src) { previewSrc = null; playbackEnded() } }
-  src.start(0, off)
-  if (previewSrc) { try { previewSrc.stop() } catch(e) {} }
-  previewSrc = src; pStartTime = ctx.currentTime - off
+  previewT = t; let op = $('op')
+  op.playbackRate = t / obpm; op.play()
   $('upb-btn').textContent = '⏸'; startProgTimer()
 }
 $('bps').oninput = () => {
@@ -260,7 +236,7 @@ $('bps').oninput = () => {
   if (audioBuf) { $('bpsv').textContent = v } else return
   if (obpm) { let p = Math.round(v / obpm * 100); $('pct').value = Math.max(30, Math.min(100, p)); $('pctv').textContent = $('pct').value + '%' }
 }
-$('bps').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸') { if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() } }
+$('bps').onchange = () => { if (!audioBuf || $('upb-btn').textContent !== '⏸') return; if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else updateSpeed() }
 let sm = document.querySelectorAll('#sm button'); let am = document.querySelectorAll('#am button')
 sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none'; void $('sp').offsetWidth; updateSliderDots(); if (audioBuf && $('upb-btn').textContent === '⏸') { if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() } })
 am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none'; if (audioBuf && $('upb-btn').textContent === '⏸') { if (b.dataset.m === 'inst') genVPreview(); else genPreview() } })
@@ -445,9 +421,7 @@ $('ap').addEventListener('ended', () => {
 
 let opDrag = false
 let seekRestart = () => {
-  if ($('upb-btn').textContent === '⏸' && (previewSrc || vPreviewSrc)) {
-    if (previewSrc) { stopPreview(); genPreview() } else { stopVPreview(); genVPreview() }
-  }
+  if ($('upb-btn').textContent === '⏸' && vPreviewSrc) { stopVPreview(); genVPreview() }
 }
 function syncTimerPos() {
   if (!(previewSrc || vPreviewSrc) || !actx) return
