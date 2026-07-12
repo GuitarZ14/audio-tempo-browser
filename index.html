@@ -536,7 +536,7 @@ function removeCenter(buf, amt) {
 function timeStretchFast(buf, sFactor) {
   let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
   let newLen = Math.round(ln / sFactor), out = actx.createBuffer(ch, newLen, sr)
-  let fSize = 2048, aHop = 512, sHop = Math.round(aHop / sFactor)
+  let fSize = 4096, aHop = Math.round(fSize / 8), sHop = Math.round(aHop / sFactor)
   let win = new Float32Array(fSize)
   for (let j = 0; j < fSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fSize))
   for (let c = 0; c < ch; c++) {
@@ -551,44 +551,74 @@ function timeStretchFast(buf, sFactor) {
   return out
 }
 
+function fft(re, im) {
+  let n = re.length
+  for (let i = 1; i < n; i++) {
+    let j = 0
+    for (let k = 0; (1 << k) < n; k++) j = (j << 1) | ((i >> k) & 1)
+    if (j > i) { let tr = re[i]; re[i] = re[j]; re[j] = tr; let ti = im[i]; im[i] = im[j]; im[j] = ti }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    let half = len >> 1, wRe = Math.cos(-2 * Math.PI / len), wIm = Math.sin(-2 * Math.PI / len)
+    for (let i = 0; i < n; i += len) {
+      let tRe = 1, tIm = 0
+      for (let j = 0; j < half; j++) {
+        let uRe = re[i + j], uIm = im[i + j]
+        let vRe = re[i + j + half] * tRe - im[i + j + half] * tIm
+        let vIm = re[i + j + half] * tIm + im[i + j + half] * tRe
+        re[i + j] = uRe + vRe; im[i + j] = uIm + vIm
+        re[i + j + half] = uRe - vRe; im[i + j + half] = uIm - vIm
+        let nRe = tRe * wRe - tIm * wIm, nIm = tRe * wIm + tIm * wRe
+        tRe = nRe; tIm = nIm
+      }
+    }
+  }
+}
+function ifft(re, im) {
+  let n = re.length
+  for (let i = 0; i < n; i++) im[i] = -im[i]
+  fft(re, im)
+  for (let i = 0; i < n; i++) { re[i] /= n; im[i] = -im[i] / n }
+}
+
 function timeStretch(buf, sFactor) {
   let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
   let newLen = Math.round(ln / sFactor)
   let out = actx.createBuffer(ch, newLen, sr)
-  let fSize = 2048, aHop = 512, sHop = Math.round(aHop / sFactor)
-  let srchD = Math.min(Math.round(aHop * 0.2), 50), srchL = 60
+  let fSize = 2048, half = fSize >> 1, aHop = Math.round(fSize / 4), sHop = Math.round(aHop / sFactor)
   let win = new Float32Array(fSize)
   for (let j = 0; j < fSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fSize))
-
   for (let c = 0; c < ch; c++) {
     let inp = buf.getChannelData(c), oup = out.getChannelData(c)
-    if (Math.abs(sFactor - 1) < 0.01) {
-      for (let j = 0; j < Math.min(ln, newLen); j++) oup[j] = inp[j]
-      continue
-    }
+    if (Math.abs(sFactor - 1) < 0.01) { for (let j = 0; j < Math.min(ln, newLen); j++) oup[j] = inp[j]; continue }
     let nrm = new Float32Array(newLen)
-    let idealA = 0, sPos = 0
-    while (idealA + fSize <= ln && sPos + fSize <= newLen) {
-      let bestA = idealA
-      if (sPos > 0) {
-        let olap = Math.min(fSize - sHop, sPos, srchL)
-        if (olap > 0) {
-          let bestScore = -Infinity
-          for (let d = -srchD; d <= srchD; d++) {
-            let ca = idealA + d
-            if (ca < 0 || ca + fSize > ln) continue
-            let score = 0
-            for (let j = 0; j < olap; j++) score += inp[ca + j] * oup[sPos + j]
-            if (score > bestScore) { bestScore = score; bestA = ca }
-          }
+    let re = new Float32Array(fSize), im = new Float32Array(fSize)
+    let prevPhase = new Float32Array(half), synPhase = new Float32Array(half)
+    let aPos = 0, sPos = 0
+    while (aPos + fSize <= ln && sPos + fSize <= newLen) {
+      for (let j = 0; j < fSize; j++) { re[j] = inp[aPos + j] * win[j]; im[j] = 0 }
+      fft(re, im)
+      if (sPos === 0) {
+        for (let k = 0; k < half; k++) {
+          let mag = Math.sqrt(re[k] * re[k] + im[k] * im[k])
+          let ph = Math.atan2(im[k], re[k])
+          prevPhase[k] = ph; synPhase[k] = ph
+          re[k] = mag * Math.cos(ph); im[k] = mag * Math.sin(ph)
+        }
+      } else {
+        for (let k = 0; k < half; k++) {
+          let mag = Math.sqrt(re[k] * re[k] + im[k] * im[k])
+          let ph = Math.atan2(im[k], re[k])
+          let delta = ph - prevPhase[k] - k * 2 * Math.PI * aHop / fSize
+          delta -= 2 * Math.PI * Math.round(delta / (2 * Math.PI))
+          synPhase[k] += (k + delta * fSize / (2 * Math.PI * aHop)) * 2 * Math.PI * sHop / fSize
+          prevPhase[k] = ph
+          re[k] = mag * Math.cos(synPhase[k]); im[k] = mag * Math.sin(synPhase[k])
         }
       }
-      for (let j = 0; j < fSize; j++) {
-        let idx = sPos + j
-        oup[idx] += inp[bestA + j] * win[j]
-        nrm[idx] += win[j]
-      }
-      idealA += aHop; sPos += sHop
+      ifft(re, im)
+      for (let j = 0; j < fSize; j++) { oup[sPos + j] += re[j] * win[j]; nrm[sPos + j] += win[j] * win[j] }
+      aPos += aHop; sPos += sHop
     }
     for (let j = 0; j < newLen; j++) if (nrm[j] > 0.001) oup[j] /= nrm[j]
   }
