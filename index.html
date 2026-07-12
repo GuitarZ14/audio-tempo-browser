@@ -46,8 +46,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .ps::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;background:#4ecdc4;cursor:pointer}
 .ps::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#4ecdc4;cursor:pointer;border:none}
 .ps-l{display:flex;justify-content:space-between;color:#a0aec0;font-size:12px}
-#pct{background-image:radial-gradient(circle at 8.333% 50%,#94a3b8 2.5px,transparent 2.5px),radial-gradient(circle at 16.667% 50%,#94a3b8 2.5px,transparent 2.5px),radial-gradient(circle at 25% 50%,#94a3b8 2.5px,transparent 2.5px),radial-gradient(circle at 33.333% 50%,#94a3b8 2.5px,transparent 2.5px),radial-gradient(circle at 41.667% 50%,#94a3b8 2.5px,transparent 2.5px),radial-gradient(circle at 50% 50%,#94a3b8 2.5px,transparent 2.5px),radial-gradient(circle at 58.333% 50%,#94a3b8 2.5px,transparent 2.5px),radial-gradient(circle at 66.667% 50%,#94a3b8 2.5px,transparent 2.5px),radial-gradient(circle at 75% 50%,#94a3b8 2.5px,transparent 2.5px),radial-gradient(circle at 83.333% 50%,#94a3b8 2.5px,transparent 2.5px),radial-gradient(circle at 91.667% 50%,#94a3b8 2.5px,transparent 2.5px);background-repeat:no-repeat}
-#bps{background-image:radial-gradient(circle at 50% 50%,#94a3b8 2.5px,transparent 2.5px);background-repeat:no-repeat}
 #upb{height:28px;border-radius:14px;display:flex;align-items:center;background:#edf2f7;cursor:pointer;position:relative;margin-top:8px}
 #upb:hover{background:#e2e8f0}
 #upi{height:8px;border-radius:4px;background:linear-gradient(90deg,#4ecdc4,#44b09e);position:absolute;left:0;top:10px;pointer-events:none;min-width:0}
@@ -100,7 +98,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </div>
 <div id="sp" style="display:none">
 <span style="font-size:14px;color:#aaa">目标速度（百分比）</span>
-  <input class="ps" type="range" id="pct" min="30" max="150">
+  <input class="ps" type="range" id="pct" min="30" max="150" step="10" list="pct-ticks">
+  <datalist id="pct-ticks"><option value="30"><option value="40"><option value="50"><option value="60"><option value="70"><option value="80"><option value="90"><option value="100"><option value="110"><option value="120"><option value="130"><option value="140"><option value="150"></datalist>
 <div class="ps-l"><span>30%</span><span>150%</span></div>
 <div style="text-align:center;font-size:14px;color:#4ecdc4;font-weight:600;margin-top:2px" id="pctv">--</div>
   <p style="color:#666;font-size:12px;margin-top:4px">拖动选择原曲速度的百分比</p>
@@ -145,6 +144,9 @@ async function processFile(f) {
     if (bpm) { obpm = bpm; obSig = detectSig(buf, bpm) || '4/4'; $('bpmn').textContent = '⏱ ' + obpm + ' BPM · ' + obSig
     } else { obpm = 120; $('bpmn').textContent = 'BPM 检测失败，默认 120' }
     $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').max = obpm; $('bps').value = obpm; $('bpsv').textContent = obpm
+    let mid = Math.round((20 + obpm) / 2); $('bps').setAttribute('list', 'bps-ticks')
+    let dl = document.getElementById('bps-ticks') || (() => { let d = document.createElement('datalist'); d.id = 'bps-ticks'; $('bps').parentNode.appendChild(d); return d })()
+    dl.innerHTML = '<option value="' + mid + '">'
     let op = $('op'); if (op.src) URL.revokeObjectURL(op.src)
     op.src = URL.createObjectURL(f)
   } catch(e) { console.error('BPM 检测失败', e); $('bpmn').textContent = 'BPM 检测失败' }
@@ -222,7 +224,7 @@ function genPreview() {
 $('bps').oninput = () => {
   let v = parseInt($('bps').value)
   if (audioBuf) { $('bpsv').textContent = v } else return
-  if (obpm) { let p = Math.round(v / obpm * 100); $('pct').value = Math.max(30, Math.min(150, p)); $('pctv').textContent = $('pct').value + '%' }
+  if (obpm) { let p = Math.round(v / obpm * 100); p = Math.round(p / 10) * 10; p = Math.max(30, Math.min(150, p)); $('pct').value = p; $('pctv').textContent = p + '%' }
 }
 $('bps').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸') genPreview() }
 let sm = document.querySelectorAll('#sm button'); let am = document.querySelectorAll('#am button')
