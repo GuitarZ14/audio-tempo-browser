@@ -225,9 +225,9 @@ function genPreview() {
   let m = document.querySelector('#sm .act').dataset.m
   let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
   if (!t || t < 20) return
-  previewT = t
   let opPos = $('op').duration ? $('op').currentTime : 0
-  let off = previewSrc ? Math.max(0, ctx.currentTime - pStartTime) : opPos * obpm / t
+  let off = previewSrc ? Math.max(0, ctx.currentTime - pStartTime) * previewT / t : opPos * obpm / t
+  previewT = t
   previewVer++; let myVer = previewVer
   let ratio = t / obpm
   if (Math.abs(ratio - lastRatio) < 0.001 && lastStretched) {
@@ -276,6 +276,7 @@ function genVPreview() {
   let off = vPreviewSrc ? Math.max(0, ctx.currentTime - vStartTime) : ($('op').duration ? $('op').currentTime : 0)
   try { if (!$('op').paused) { $('op').pause() } } catch(e) {}
   stopPreview()
+  let oldPT = previewT
   vPreviewVer++; let myVer = vPreviewVer
   vPreviewTimer = setTimeout(async () => {
     vPreviewTimer = null; if (myVer !== vPreviewVer) return
@@ -288,7 +289,8 @@ function genVPreview() {
         previewT = t
         let ratio = t / obpm; if (ratio < 0.25) ratio = 0.25; if (ratio > 4) ratio = 4
         processed = timeStretch(processed, ratio)
-        off = off * obpm / t
+        if (vPreviewSrc) off = off * oldPT / t
+        else off = off * obpm / t
       }
       if (myVer !== vPreviewVer) return
       let src = ctx.createBufferSource()
