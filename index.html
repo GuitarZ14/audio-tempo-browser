@@ -51,6 +51,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .ps-l{display:flex;justify-content:space-between;color:#888;font-size:12px}
 .tap{display:block;margin:8px auto 0;padding:8px 24px;border-radius:20px;border:1px solid rgba(78,205,196,.4);background:transparent;color:#4ecdc4;font-size:14px;cursor:pointer}
 .tap:hover{background:rgba(78,205,196,.1)}
+.lb{display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer}
+.lb span{font-size:14px;color:#ccc}
 </style>
 </head>
 <body>
@@ -75,6 +77,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <span style="font-size:14px;color:#aaa">目标速度（BPM）</span>
 <input class="bi" type="text" id="bps">
 <p style="color:#666;font-size:12px;margin-top:8px">用空格隔开，例如：60 80 100 120 140</p>
+<label style="display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer">
+  <input type="checkbox" id="vr" style="width:16px;height:16px;accent-color:#4ecdc4">
+  <span style="font-size:14px;color:#ccc">🎤 人声消除（伴奏模式）</span>
+</label>
+<div id="vrs" style="display:none;margin-top:8px">
+  <span style="font-size:12px;color:#888">消除强度</span>
+  <input class="ps" type="range" id="vra" min="50" max="100" value="80">
+  <div class="ps-l"><span>弱</span><span id="vrav">80%</span><span>强</span></div>
+</div>
 </div>
 <div class="card">
 <span style="font-size:14px;color:#aaa">目标速度（百分比）</span>
@@ -141,6 +152,8 @@ $('bps').oninput = () => {
   let nums = $('bps').value.trim().split(/[\s,，、]+/).map(Number).filter(n => !isNaN(n))
   if (nums.length === 1 && nums[0] > 0 && obpm) { let p = Math.round(nums[0] / obpm * 100); if (p >= 50 && p <= 200) { $('pct').value = p; $('pctv').textContent = p + '%' } }
 }
+$('vr').onchange = () => { $('vrs').style.display = $('vr').checked ? 'block' : 'none' }
+$('vra').oninput = () => { $('vrav').textContent = $('vra').value + '%' }
 
 $('go').onclick = async () => {
   if (!file) { err('请先选择音频'); return }
@@ -154,6 +167,7 @@ $('go').onclick = async () => {
     let buf = audioBuf
     if (!buf) buf = await actx.decodeAudioData(await file.arrayBuffer())
     pb(5)
+    if ($('vr').checked) { buf = removeCenter(buf, parseInt($('vra').value) / 100); pb(7) }
     let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
     stx('原始 BPM：' + obpm + (buf ? ' · ' + (detectSig(buf, obpm) || '4/4') : '')); pb(10)
 
@@ -272,6 +286,15 @@ $('ap').addEventListener('ended', () => {
   $('apw').classList.remove('sh')
   document.querySelectorAll('#rl .pb2').forEach(b => b.textContent = '▶ 播放')
 })
+
+function removeCenter(buf, amt) {
+  if (buf.numberOfChannels < 2) return buf
+  let ln = buf.length, out = actx.createBuffer(2, ln, buf.sampleRate)
+  let l = buf.getChannelData(0), r = buf.getChannelData(1)
+  let ol = out.getChannelData(0), or = out.getChannelData(1)
+  for (let i = 0; i < ln; i++) { let m = (l[i] + r[i]) * 0.5; ol[i] = l[i] - m * amt; or[i] = r[i] - m * amt }
+  return out
+}
 
 function timeStretch(buf, sFactor) {
   let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
