@@ -94,7 +94,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <input class="ps" type="range" id="pct" min="50" max="200" value="100" step="1">
 <div class="ps-l"><span>50%</span><span id="pctv">100%</span><span>200%</span></div>
 <p style="color:#666;font-size:12px;margin-top:4px">拖动选择原曲速度的百分比</p>
-<button class="pv" id="pv" onclick="togglePreview()">▶ 实时试听（变调）</button>
+<button class="pv" id="pv" onclick="togglePreview()">▶ 试听</button>
 </div>
 <button class="bn" id="go">🎧 生成伴奏</button>
 <div class="st" id="st"><p id="stx">处理中...</p><div class="pb"><div class="pb-bar" id="pbb"></div></div></div>
@@ -154,18 +154,29 @@ let previewSrc = null
 $('pct').oninput = () => {
   let v = parseInt($('pct').value); $('pctv').textContent = v + '%'
   if (obpm) $('bps').value = Math.round(obpm * v / 100)
-  if (previewSrc) previewSrc.playbackRate.value = v / 100
 }
+$('pct').onchange = () => { if (previewSrc) genPreview() }
 function togglePreview() {
-  if (previewSrc) { previewSrc.stop(); previewSrc = null; $('pv').textContent = '▶ 实时试听（变调）'; return }
+  if (previewSrc) { previewSrc.stop(); previewSrc = null; $('pv').textContent = '▶ 试听'; return }
   if (!audioBuf) { err('请先选择音频'); return }
+  genPreview()
+}
+function genPreview() {
+  if (!audioBuf) return
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   let pct = parseInt($('pct').value) / 100
-  previewSrc = ctx.createBufferSource()
-  previewSrc.buffer = audioBuf; previewSrc.playbackRate.value = pct
-  previewSrc.connect(ctx.destination)
-  previewSrc.start(); previewSrc.onended = () => { previewSrc = null; $('pv').textContent = '▶ 实时试听（变调）' }
-  $('pv').textContent = '⏹ 停止试听'
+  let t = Math.round(obpm * pct)
+  $('pv').textContent = '⏳ 处理中...'; $('pv').disabled = true
+  setTimeout(async () => {
+    try {
+      let stretched = timeStretchFast(audioBuf, t / obpm)
+      if (previewSrc) { previewSrc.stop(); previewSrc = null }
+      previewSrc = ctx.createBufferSource()
+      previewSrc.buffer = stretched; previewSrc.connect(ctx.destination)
+      previewSrc.start(); previewSrc.onended = () => { previewSrc = null; $('pv').textContent = '▶ 试听'; $('pv').disabled = false }
+      $('pv').textContent = '⏹ 停止'; $('pv').disabled = false
+    } catch(e) { $('pv').textContent = '▶ 试听'; $('pv').disabled = false }
+  }, 50)
 }
 $('bps').oninput = () => {
   let nums = $('bps').value.trim().split(/[\s,，、]+/).map(Number).filter(n => !isNaN(n))
@@ -312,6 +323,24 @@ function removeCenter(buf, amt) {
   let l = buf.getChannelData(0), r = buf.getChannelData(1)
   let ol = out.getChannelData(0), or = out.getChannelData(1)
   for (let i = 0; i < ln; i++) { let m = (l[i] + r[i]) * 0.5; ol[i] = l[i] - m * amt; or[i] = r[i] - m * amt }
+  return out
+}
+
+function timeStretchFast(buf, sFactor) {
+  let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
+  let newLen = Math.round(ln / sFactor), out = actx.createBuffer(ch, newLen, sr)
+  let fSize = 2048, aHop = 512, sHop = Math.round(aHop / sFactor)
+  let win = new Float32Array(fSize)
+  for (let j = 0; j < fSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fSize))
+  for (let c = 0; c < ch; c++) {
+    let inp = buf.getChannelData(c), oup = out.getChannelData(c), nrm = new Float32Array(newLen)
+    let aPos = 0, sPos = 0
+    while (aPos + fSize <= ln && sPos + fSize <= newLen) {
+      for (let j = 0; j < fSize; j++) { let idx = sPos + j; oup[idx] += inp[aPos + j] * win[j]; nrm[idx] += win[j] }
+      aPos += aHop; sPos += sHop
+    }
+    for (let j = 0; j < newLen; j++) if (nrm[j] > 0.001) oup[j] /= nrm[j]
+  }
   return out
 }
 
