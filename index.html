@@ -215,27 +215,26 @@ $('bps').oninput = () => {
 }
 let sm = document.querySelectorAll('#sm button'); let am = document.querySelectorAll('#am button')
 sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none' })
-am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none' })
+am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none'; if (b.dataset.m === 'inst' && audioBuf && !vPreviewSrc && !vPreviewTimer) toggleVocalPreview() })
 
 let vPreviewSrc = null; let vPreviewTimer = null; let vPreviewVer = 0
-$('vra').onchange = () => { if (vPreviewSrc || vPreviewTimer) toggleVocalPreview() }
+$('vra').onchange = () => { if (vPreviewSrc || vPreviewTimer) genVPreview() }
 function stopVPrev() {
   if (vPreviewTimer) { clearTimeout(vPreviewTimer); vPreviewTimer = null }
   if (vPreviewSrc) { try { vPreviewSrc.stop() } catch(e) {} vPreviewSrc = null }
 }
-function toggleVocalPreview() {
-  if (vPreviewSrc || vPreviewTimer) { stopVPrev(); $('pv3').textContent = '🔊 试听去人声'; $('pv3').disabled = false; return }
-  if (!audioBuf) { err('请先选择音频'); return }
-  $('pv3').textContent = '⏳ 处理中...'; $('pv3').disabled = true; vPreviewVer++; let myVer = vPreviewVer; let ctx = getActx()
-  if (ctx.state === 'suspended') ctx.resume()
+function genVPreview() {
+  if (!audioBuf) return
+  let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
+  if (audioBuf.numberOfChannels < 2) { err('单声道音频无法去人声'); return }
+  if (vPreviewTimer) clearTimeout(vPreviewTimer)
+  $('pv3').textContent = '⏳ 处理中...'; $('pv3').disabled = true; vPreviewVer++; let myVer = vPreviewVer
   vPreviewTimer = setTimeout(async () => {
     vPreviewTimer = null; if (myVer !== vPreviewVer) return
     try {
       stopVPrev()
       if (myVer !== vPreviewVer) return
-      let amt = parseInt($('vra').value) / 100
-      if (!audioBuf || audioBuf.numberOfChannels < 2) { err('单声道音频无法去人声'); $('pv3').textContent = '🔊 试听去人声'; $('pv3').disabled = false; return }
-      let processed = removeCenter(audioBuf, amt)
+      let processed = removeCenter(audioBuf, parseInt($('vra').value) / 100)
       if (myVer !== vPreviewVer) return
       let src = ctx.createBufferSource()
       src.buffer = processed; src.connect(ctx.destination)
@@ -244,6 +243,10 @@ function toggleVocalPreview() {
       $('pv3').textContent = '⏹ 停止'; $('pv3').disabled = false
     } catch(e) { $('pv3').textContent = '🔊 试听去人声'; $('pv3').disabled = false }
   }, 100)
+}
+function toggleVocalPreview() {
+  if (vPreviewSrc || vPreviewTimer) { stopVPrev(); $('pv3').textContent = '🔊 试听去人声'; $('pv3').disabled = false; return }
+  genVPreview()
 }
 
 $('go').onclick = async () => {
