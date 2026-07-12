@@ -195,10 +195,21 @@ function startProgTimer() {
     else if (vPreviewSrc) cur = Math.max(0, (actx ? actx.currentTime : 0) - vStartTime)
     else cur = op.currentTime
     if (dur) {
+      if (previewSrc || vPreviewSrc) {
+        let m = document.querySelector('#sm .act').dataset.m
+        let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
+        if (t && t >= 20) {
+          let origCur = cur * obpm / t
+          setProg(Math.min(100, origCur / dur * 100));
+          $('utm').textContent = fmt(origCur) + ' / ' + fmt(dur)
+          if (origCur >= dur && dur > 0) { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
+          return
+        }
+      }
       setProg(cur / dur * 100);
       $('utm').textContent = fmt(cur) + ' / ' + fmt(dur)
+      if (cur >= dur && dur > 0) { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
     }
-    if (cur >= dur && dur > 0) { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
   }, 200)
 }
 function setProg(pct) { let v = Math.min(100, Math.max(0, pct)); $('upi').style.width = v + '%'; $('upthumb').style.left = v + '%' }
