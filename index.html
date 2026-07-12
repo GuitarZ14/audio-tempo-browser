@@ -90,7 +90,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <input class="ps" type="range" id="bps" min="20" max="200" value="100">
 <div class="ps-l"><span>最慢</span><span>原速</span></div>
 <div style="text-align:center;font-size:14px;color:#4ecdc4;font-weight:600;margin-top:2px" id="bpsv">100</div>
-<button class="pv" id="pv2" onclick="togglePreview()">▶ 试听</button>
 </div>
 <div id="sp" style="display:none">
 <span style="font-size:14px;color:#aaa">目标速度（百分比）</span>
@@ -98,7 +97,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="ps-l"><span>30%</span><span>150%</span></div>
 <div style="text-align:center;font-size:14px;color:#4ecdc4;font-weight:600;margin-top:2px" id="pctv">100%</div>
   <p style="color:#666;font-size:12px;margin-top:4px">拖动选择原曲速度的百分比</p>
-<button class="pv" id="pv" onclick="togglePreview()">▶ 试听</button>
 </div>
 </div>
 </div>
@@ -156,15 +154,10 @@ $('pct').oninput = () => {
   let v = parseInt($('pct').value); $('pctv').textContent = v + '%'
   if (obpm) { $('bpsv').textContent = Math.round(obpm * v / 100); $('bps').value = Math.round(obpm * v / 100) }
 }
-$('pct').onchange = () => { if (previewSrc || previewTimer) genPreview() }
+$('pct').onchange = () => { if (audioBuf) genPreview() }
 function stopPreview() {
   if (previewTimer) { clearTimeout(previewTimer); previewTimer = null }
   if (previewSrc) { try { previewSrc.stop() } catch(e) {} previewSrc = null }
-}
-function togglePreview() {
-  if (previewSrc || previewTimer) { stopPreview(); $('pv').textContent = '▶ 试听'; $('pv').disabled = false; $('pv2').textContent = '▶ 试听'; $('pv2').disabled = false; return }
-  if (!audioBuf) { err('请先选择音频'); return }
-  genPreview()
 }
 function genPreview() {
   if (!audioBuf) return
@@ -172,10 +165,9 @@ function genPreview() {
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   let m = document.querySelector('#sm .act').dataset.m
   let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
-  if (!t || t < 20) { err('请输入有效速度'); return }
+  if (!t || t < 20) return
   let opPos = $('op').duration ? $('op').currentTime : 0
   let off = previewSrc ? Math.max(0, ctx.currentTime - pStartTime) : opPos * obpm / t
-  $('pv').textContent = '⏳ 处理中...'; $('pv').disabled = true; $('pv2').textContent = '⏳ 处理中...'; $('pv2').disabled = true
   previewVer++; let myVer = previewVer
   previewTimer = setTimeout(async () => {
     previewTimer = null
@@ -185,25 +177,22 @@ function genPreview() {
       let ratio = t / obpm
       let stretched = timeStretch(audioBuf, ratio)
       if (myVer !== previewVer) return
-      let sr = audioBuf.sampleRate, ch = audioBuf.numberOfChannels
-      if (myVer !== previewVer) return
       stopPreview()
       if (myVer !== previewVer) return
       let src = ctx.createBufferSource()
       src.buffer = stretched; src.connect(ctx.destination)
-      src.onended = () => { if (previewSrc === src) { previewSrc = null; $('pv').textContent = '▶ 试听'; $('pv').disabled = false; $('pv2').textContent = '▶ 试听'; $('pv2').disabled = false } }
+      src.onended = () => { if (previewSrc === src) { previewSrc = null } }
       src.start(0, off); previewSrc = src; pStartTime = ctx.currentTime - off
-      $('pv').textContent = '⏹ 停止'; $('pv').disabled = false; $('pv2').textContent = '⏹ 停止'; $('pv2').disabled = false
-    } catch(e) { $('pv').textContent = '▶ 试听'; $('pv').disabled = false; $('pv2').textContent = '▶ 试听'; $('pv2').disabled = false }
+    } catch(e) {}
   }, 50)
 }
 $('bps').oninput = () => {
   let v = parseInt($('bps').value); $('bpsv').textContent = v
   if (obpm) { let p = Math.round(v / obpm * 100); $('pct').value = Math.max(30, Math.min(150, p)); $('pctv').textContent = $('pct').value + '%' }
 }
-$('bps').onchange = () => { if (previewSrc || previewTimer) genPreview() }
+$('bps').onchange = () => { if (audioBuf) genPreview() }
 let sm = document.querySelectorAll('#sm button'); let am = document.querySelectorAll('#am button')
-sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none'; if (previewSrc || previewTimer) stopPreview(); $('pv').textContent = '▶ 试听'; $('pv').disabled = false; $('pv2').textContent = '▶ 试听'; $('pv2').disabled = false })
+sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none'; stopPreview(); if (audioBuf) genPreview() })
 am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none'; if (b.dataset.m === 'inst' && audioBuf && !vPreviewSrc && !vPreviewTimer) toggleVocalPreview() })
 
 let vPreviewSrc = null; let vPreviewTimer = null; let vPreviewVer = 0; let vStartTime = 0
@@ -219,7 +208,7 @@ function genVPreview() {
   if (vPreviewTimer) clearTimeout(vPreviewTimer)
   let off = vPreviewSrc ? Math.max(0, ctx.currentTime - vStartTime) : ($('op').duration ? $('op').currentTime : 0)
   $('pv3').textContent = '⏳ 处理中...'; $('pv3').disabled = true; vPreviewVer++; let myVer = vPreviewVer
-  try { if (!$('op').paused) { $('op').pause(); $('upb-btn').textContent = '▶'; $('opb2').textContent = '▶' } } catch(e) {}
+  try { if (!$('op').paused) { $('op').pause(); $('upb-btn').textContent = '▶' } } catch(e) {}
   vPreviewTimer = setTimeout(async () => {
     vPreviewTimer = null; if (myVer !== vPreviewVer) return
     try {
