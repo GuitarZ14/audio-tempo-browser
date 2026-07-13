@@ -231,7 +231,7 @@ function precomputeNextSegment() {
   if (remain < 1.5) return
   let tgt = previewT, ratio = tgt / obpm, sr = audioBuf.sampleRate
   let isInst = document.querySelector('#am .act').dataset.m === 'inst'
-  let segLen = Math.min(audioBuf.length - Math.round(pos * sr), Math.round(isInst ? 15 * sr : 45 * sr))
+  let segLen = Math.min(audioBuf.length - Math.round(pos * sr), Math.round(isInst ? 60 * sr : 180 * sr))
   if (segLen < 512) return
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
@@ -253,20 +253,12 @@ function playBuffer(buf, origPos) {
   segOrigStart = origPos
   let src = ctx.createBufferSource()
   src.buffer = buf
-  let gain = ctx.createGain()
-  let dur = buf.length / buf.sampleRate
-  let now = ctx.currentTime
-  let fade = 0.005
-  gain.gain.setValueAtTime(0, now)
-  gain.gain.linearRampToValueAtTime(1, now + fade)
-  gain.gain.setValueAtTime(1, now + dur - fade)
-  gain.gain.linearRampToValueAtTime(0, now + dur)
-  src.connect(gain).connect(ctx.destination)
+  src.connect(ctx.destination)
   src.onended = playbackEnded
   src.start(0)
   previewSrc = src
-  pStartTime = now
-  segDuration = dur
+  pStartTime = ctx.currentTime
+  segDuration = buf.length / buf.sampleRate
   $('upb-btn').textContent = '⏸'
   startProgTimer()
 }
@@ -308,7 +300,7 @@ function genPreview() {
   let dur = op.duration, pos = Math.max(0, op.currentTime || 0)
   if (dur > 0 && pos >= dur) { pos = 0; op.currentTime = 0 }
   let sr = audioBuf.sampleRate, segStart = Math.round(pos * sr)
-  let segLen = Math.min(audioBuf.length - segStart, Math.round(45 * sr))
+  let segLen = Math.min(audioBuf.length - segStart, Math.round(180 * sr))
   if (segLen < 512) return
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
@@ -347,7 +339,7 @@ function genVPreview() {
   let curPos = op.duration ? op.currentTime : 0
   if (curPos >= op.duration) curPos = 0
   let segStart = Math.round(curPos * sr)
-  let segLen = Math.min(audioBuf.length - segStart, Math.round(15 * sr))
+  let segLen = Math.min(audioBuf.length - segStart, Math.round(60 * sr))
   if (segLen < 512) return
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
@@ -548,38 +540,46 @@ function detectBpm(buf) {
           if (near < maxLag && auto[near + 1] > nn) nn = auto[near + 1]
           v = nn
         }
-        score += v * 0.5
+        score += v * 0.3
       }
     }
+    // 速度偏好：轻微偏向 60-180 范围，避免极低/极高 BPM
+    if (p.bpm < 60) score *= 0.7 + p.bpm / 200
+    else if (p.bpm > 180) score *= 0.7 + (240 - p.bpm) / 200
     if (score > bestScore) { bestScore = score; bestBpm = p.bpm }
   }
   if (bestScore < 0 && peaks.length > 0) bestBpm = peaks[0].bpm
-  // 八度校正：检查是否最佳 BPM 被半速或倍速干扰，直接比较 1/2 和 2 倍候选的评分
-  let bestOctave = bestBpm
-  let checks = [bestBpm * 2, bestBpm / 2]
-  for (let c of checks) {
-    if (c < 30 || c > 240) continue
-    let cLag = 60 / c / (hop / sr)
-    if (cLag < minLag || cLag > maxLag) continue
-    let near = Math.round(cLag)
-    // 计算该候选的谐波评分
-    let v = auto[near] || 0
-    if (near > minLag && near < maxLag) {
-      if (auto[near - 1] > v) v = auto[near - 1]
-      if (auto[near + 1] > v) v = auto[near + 1]
+  // 八度校正：向上检查 2x/3x/4x，向下检查 1/2，迭代修正直到稳定
+  for (let iter = 0; iter < 3; iter++) {
+    let changed = false
+    let candidates = [bestBpm * 2, bestBpm * 3, bestBpm * 4, bestBpm / 2]
+    for (let c of candidates) {
+      if (c < 30 || c > 240) continue
+      let cLag = 60 / c / (hop / sr)
+      if (cLag < minLag || cLag > maxLag) continue
+      let near = Math.round(cLag)
+      let v = auto[near] || 0
+      if (near > minLag && near < maxLag) {
+        if (auto[near - 1] > v) v = auto[near - 1]
+        if (auto[near + 1] > v) v = auto[near + 1]
+      }
+      let cScore = v
+      for (let m of [2, 3, 4]) {
+        let mLag = near * m
+        if (mLag <= maxLag) cScore += (auto[mLag] || 0) / m
+      }
+      for (let d of [2, 3]) {
+        let dLag = near / d
+        if (dLag >= minLag) { let n = Math.round(dLag); cScore += (auto[n] || 0) * 0.3 }
+      }
+      if (c < 60) cScore *= 0.7 + c / 200
+      if (cScore > bestScore * (bestBpm < c ? 1.02 : 1.03)) {
+        bestScore = cScore; bestBpm = c; changed = true
+      }
     }
-    let cScore = v
-    for (let m of [2, 3, 4]) {
-      let mLag = near * m
-      if (mLag <= maxLag) cScore += (auto[mLag] || 0) / m
-    }
-    for (let d of [2, 3]) {
-      let dLag = near / d
-      if (dLag >= minLag) { let n = Math.round(dLag); cScore += (auto[n] || 0) * 0.5 }
-    }
-    if (cScore > bestScore * 1.05) { bestScore = cScore; bestOctave = c }
+    if (!changed) break
   }
-  bestBpm = Math.round(Math.max(30, Math.min(240, bestOctave)))
+  bestBpm = Math.round(Math.max(30, Math.min(240, bestBpm)))
   return bestBpm
 }
 
