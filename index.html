@@ -596,7 +596,7 @@ function stopCountIn() {
 }
 function playCountIn() {
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
-  stopCountIn(); $('upb-btn').textContent = '⏸'; stopProgTimer()
+  stopPreview(); stopVPreview(); stopCountIn(); $('upb-btn').textContent = '⏸'; stopProgTimer()
   let m = document.querySelector('#sm .act').dataset.m
   let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
   if (!t || t < 20) t = obpm
