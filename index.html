@@ -131,6 +131,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <audio id="ap" style="display:none"></audio>
 <script>
 let actx, file, obpm = 120, bn = '', audioBuf = null, obSig = '4/4', countInOn = false, origAudioUrl = null
+let segDuration = 0, nextSegBuffer = null, nextSegOrigStart = 0
 let $ = id => document.getElementById(id)
 
 function getActx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx }
@@ -208,6 +209,8 @@ function startProgTimer() {
           setProg(Math.min(100, origCur / dur * 100));
           $('utm').textContent = fmt(origCur) + ' / ' + fmt(dur)
           if (origCur >= dur && dur > 0) { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
+          // 段尾预计算下一段（消除接续时的咔声）
+          if (!nextSegBuffer && segDuration - cur < 2 && segDuration - cur > 0) precomputeNextSegment()
           return
         }
       }
@@ -217,7 +220,45 @@ function startProgTimer() {
     }
   }, 200)
 }
+function invalidateNextSeg() { nextSegBuffer = null }
+function precomputeNextSegment() {
+  if (!audioBuf || !previewT || Math.abs(previewT / obpm - 1) < 0.01) return
+  let op = $('op'), pos = op.currentTime || 0
+  let remain = (op.duration || audioBuf.duration / audioBuf.sampleRate) - pos
+  if (remain < 1.5) return
+  let tgt = previewT, ratio = tgt / obpm, sr = audioBuf.sampleRate
+  let isInst = document.querySelector('#am .act').dataset.m === 'inst'
+  let segLen = Math.min(audioBuf.length - Math.round(pos * sr), Math.round(isInst ? 15 * sr : 30 * sr))
+  if (segLen < 512) return
+  let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
+  for (let c = 0; c < audioBuf.numberOfChannels; c++) {
+    let s = audioBuf.getChannelData(c), d = seg.getChannelData(c)
+    for (let j = 0; j < segLen; j++) d[j] = s[Math.round(pos * sr) + j]
+  }
+  if (isInst) {
+    let ms = midSide(seg)
+    let msStretched = Math.abs(ratio - 1) < 0.01 ? ms : timeStretch(ms, ratio)
+    nextSegBuffer = fromMidSide(msStretched, parseInt($('vra').value) / 100)
+  } else {
+    nextSegBuffer = Math.abs(ratio - 1) < 0.01 ? seg : timeStretch(seg, ratio)
+  }
+  nextSegOrigStart = pos
+}
 function setProg(pct) { let v = Math.min(100, Math.max(0, pct)); $('upi').style.width = v + '%'; $('upthumb').style.left = v + '%' }
+function playBuffer(buf, origPos) {
+  let ctx = getActx()
+  segOrigStart = origPos
+  let src = ctx.createBufferSource()
+  src.buffer = buf
+  src.connect(ctx.destination)
+  src.onended = playbackEnded
+  src.start(0)
+  previewSrc = src
+  pStartTime = ctx.currentTime
+  segDuration = buf.length / buf.sampleRate
+  $('upb-btn').textContent = '⏸'
+  startProgTimer()
+}
 function playbackEnded() {
   // 段播放完毕，检查是否还有剩余音频需要接续
   if (audioBuf && previewT) {
@@ -225,6 +266,12 @@ function playbackEnded() {
     if (tgt && Math.abs(tgt / obpm - 1) >= 0.01) {
       let remain = (op.duration || audioBuf.duration / audioBuf.sampleRate) - (op.currentTime || 0)
       if (remain > 1) {
+        // 有预计算好的缓冲就直接用，避免段间停顿产生咔声
+        if (nextSegBuffer) {
+          let buf = nextSegBuffer; nextSegBuffer = null
+          playBuffer(buf, nextSegOrigStart)
+          return
+        }
         if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview()
         else genPreview()
         return
@@ -239,7 +286,7 @@ function getTargetBPM() {
 }
 function genPreview() {
   if (!audioBuf) return
-  stopCountIn(); stopVPreview(); stopPreview()
+  stopCountIn(); stopVPreview(); stopPreview(); invalidateNextSeg()
   let op = $('op')
   try { if (!op.paused) op.pause() } catch(e) {}
   let t = getTargetBPM()
@@ -260,11 +307,7 @@ function genPreview() {
   let stretched = Math.abs(ratio - 1) < 0.01 ? seg : timeStretch(seg, ratio); segOrigStart = pos
   // 处理完成后才停旧播放、启新播放，避免断音
   stopPreview()
-  let src = ctx.createBufferSource()
-  src.buffer = stretched; src.connect(ctx.destination)
-  src.onended = playbackEnded
-  src.start(0); previewSrc = src; pStartTime = ctx.currentTime
-  $('upb-btn').textContent = '⏸'; startProgTimer()
+  playBuffer(stretched, pos)
 }
 $('bps').oninput = () => {
   let v = parseInt($('bps').value)
@@ -308,13 +351,7 @@ function genVPreview() {
   let processed = fromMidSide(msStretched, parseInt($('vra').value) / 100)
   // 处理完成后才停旧播放、启新播放
   stopCountIn(); stopPreview(); stopVPreview()
-  let src = ctx.createBufferSource()
-  src.buffer = processed; src.connect(ctx.destination)
-  src.onended = playbackEnded
-  src.start(0, 0)
-  previewSrc = src; pStartTime = ctx.currentTime
-  segOrigStart = curPos
-  $('upb-btn').textContent = '⏸'; startProgTimer()
+  playBuffer(processed, curPos)
 }
 
 $('go').onclick = async () => {
@@ -577,7 +614,9 @@ function startPlayback() {
 }
 function restartPlay() {
   if (!audioBuf) return
-  $('op').currentTime = 0; segOrigStart = 0; setProg(0); $('utm').textContent = '0:00 / ' + fmt($('op').duration || 0)
+  let op = $('op'); try { if (!op.paused) op.pause() } catch(e) {}
+  stopPreview(); stopCountIn()
+  op.currentTime = 0; segOrigStart = 0; setProg(0); $('utm').textContent = '0:00 / ' + fmt(op.duration || 0)
   if ($('upb-btn').textContent === '⏸') { if (countInOn) { playCountIn() } else { startPlayback() } }
 }
 function toggleCountIn() {
@@ -601,9 +640,9 @@ function playCountIn() {
   let m = document.querySelector('#sm .act').dataset.m
   let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
   if (!t || t < 20) t = obpm
-  let beats = getCountInBeats(), interval = 60 / t
+  let beats = getCountInBeats(), interval = 60 / t, startAt = ctx.currentTime + 0.05
   for (let i = 0; i < beats; i++) {
-    let t2 = ctx.currentTime + i * interval
+    let t2 = startAt + i * interval
     let osc = ctx.createOscillator(), gain = ctx.createGain()
     osc.frequency.value = i === 0 ? 1200 : 880
     gain.gain.setValueAtTime(0.6, t2); gain.gain.exponentialRampToValueAtTime(0.001, t2 + 0.06)
@@ -611,7 +650,7 @@ function playCountIn() {
     countInOscs.push(osc)
   }
   setProg(0); $('utm').textContent = '预备 ' + beats + ' 拍'
-  countInTimer = setTimeout(() => { countInTimer = null; startPlayback() }, beats * interval * 1000 + 100)
+  countInTimer = setTimeout(() => { countInTimer = null; startPlayback() }, 50 + beats * interval * 1000 + 100)
 }
 $('op').addEventListener('ended', playbackEnded)
 
