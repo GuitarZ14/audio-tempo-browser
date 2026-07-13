@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>变速伴奏生成器</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#f0f4f8,#e2e8f0);min-height:100vh;color:#1a202c;padding:20px}
@@ -80,7 +81,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="nt" id="unt">支持 MP3 / WAV / M4A</div>
 <div class="fi" id="fi" style="display:none">
  <div class="ap-pb" id="upb" style="margin-top:0"><div class="ap-pb-in" id="upi"></div><div id="upthumb"></div></div>
-<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:3px 8px;border-radius:12px;font-size:12px">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:3px 12px;border-radius:12px;font-size:12px">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px;color:#a0aec0">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:3px 10px;border-radius:12px;font-size:11px">选取音频文件</button></div>
+ <div style="display:flex;align-items:center;gap:10px;margin-top:18px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:8px 14px;border-radius:16px;font-size:18px;line-height:1">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:8px 22px;border-radius:16px;font-size:18px;line-height:1">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px;color:#a0aec0">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:6px 12px;border-radius:14px;font-size:13px">选取音频文件</button></div>
  <div style="font-size:11px;color:#718096;margin-top:2px;display:flex;align-items:center;justify-content:space-between"><span id="bpmn"></span><button id="ci-btn" onclick="event.stopPropagation();toggleCountIn()" title="开启预备拍"><span class="ci-ic">⏲</span>开启预备拍</button></div>
 </div>
 </div>
@@ -128,7 +129,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </div>
 <audio id="ap" style="display:none"></audio>
 <script>
-let actx, file, obpm = 120, bn = '', audioBuf = null, obSig = '4/4', countInOn = false
+let actx, file, obpm = 120, bn = '', audioBuf = null, obSig = '4/4', countInOn = false, origAudioUrl = null
 let $ = id => document.getElementById(id)
 
 function getActx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx }
@@ -158,11 +159,16 @@ async function processFile(f) {
     let buf = await getActx().decodeAudioData(await f.arrayBuffer())
     audioBuf = buf
     let bpm = detectBpm(buf)
-    if (bpm) { obpm = bpm; obSig = detectSig(buf, bpm) || '4/4'; $('bpmn').textContent = '⏱ ' + obpm + ' BPM · ' + obSig
+    if (bpm) {
+      obpm = bpm
+      let sigScores = detectSigScores(buf, bpm)
+      obSig = sigScores.sig || '4/4'
+      $('bpmn').textContent = '⏱ ' + obpm + ' BPM · ' + obSig + ' [4:' + sigScores.s4.toFixed(2) + ' 6:' + sigScores.s6.toFixed(2) + ' 3:' + sigScores.s3.toFixed(2) + ']'
     } else { obpm = 120; $('bpmn').textContent = 'BPM 检测失败，默认 120' }
     $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').max = obpm; $('bps').value = obpm; $('bpsv').textContent = obpm; updateSliderDots()
     let op = $('op'); if (op.src) URL.revokeObjectURL(op.src)
-    op.src = URL.createObjectURL(f)
+    origAudioUrl = URL.createObjectURL(f)
+    op.src = origAudioUrl
   } catch(e) { console.error('BPM 检测失败', e); $('bpmn').textContent = 'BPM 检测失败' }
 }
 
@@ -172,18 +178,17 @@ $('gi').onchange = e => { let f = e.target.files[0]; if (f) processFile(f) }
   ul.addEventListener('drop', e => { e.preventDefault(); let f = e.dataTransfer.files[0]; if (f) processFile(f) })
 })(document.querySelector('.ul'))
 document.querySelectorAll('#uic,#utx,#unt').forEach(el => el.addEventListener('click', () => { if (!$('fi').style.display || $('fi').style.display === 'none') $('gi').click() }))
-let previewSrc = null; let pStartTime = 0; let previewT = 0
+let previewSrc = null; let pStartTime = 0; let previewT = 0; let stretchedBuf = null; let segOrigStart = 0
 $('pct').oninput = () => {
   let v = parseInt($('pct').value); $('pctv').textContent = v + '%'
   if (audioBuf && obpm) { $('bpsv').textContent = Math.round(obpm * v / 100); $('bps').value = Math.round(obpm * v / 100) }
 }
-$('pct').onchange = () => { if (!audioBuf || $('upb-btn').textContent !== '⏸') return; if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else updateSpeed() }
+$('pct').onchange = () => { if (!audioBuf || $('upb-btn').textContent !== '⏸') return; if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() }
 function stopPreview() {
   if (previewSrc) { try { previewSrc.stop() } catch(e) {} previewSrc = null }
 }
 function stopVPreview() {
-  if (vPreviewTimer) { clearTimeout(vPreviewTimer); vPreviewTimer = null }
-  if (vPreviewSrc) { try { vPreviewSrc.stop() } catch(e) {} vPreviewSrc = null }
+  vocalAudioPlayback = false
 }
 function stopAllPreviews() { stopPreview(); stopVPreview(); stopCountIn() }
 function stopProgTimer() { if (progTimer) { clearInterval(progTimer); progTimer = null } }
@@ -193,12 +198,12 @@ function startProgTimer() {
     if (opDrag) return
     let op = $('op'), dur = op.duration && isFinite(op.duration) && op.duration > 0 ? op.duration : (audioBuf ? audioBuf.duration / audioBuf.sampleRate : 0), cur = 0
     if (previewSrc) cur = Math.max(0, (actx ? actx.currentTime : 0) - pStartTime)
-    else if (vPreviewSrc) cur = Math.max(0, (actx ? actx.currentTime : 0) - vStartTime)
     else cur = op.currentTime
     if (dur) {
-      if (previewSrc || vPreviewSrc) {
+      if (previewSrc) {
         if (previewT && previewT >= 20) {
-          let origCur = cur * previewT / obpm
+          let origCur = segOrigStart + cur * previewT / obpm
+          op.currentTime = origCur
           setProg(Math.min(100, origCur / dur * 100));
           $('utm').textContent = fmt(origCur) + ' / ' + fmt(dur)
           if (origCur >= dur && dur > 0) { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
@@ -217,18 +222,31 @@ function getTargetBPM() {
   let m = document.querySelector('#sm .act').dataset.m
   return m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
 }
-function updateSpeed() {
-  let t = getTargetBPM()
-  if (!t || t < 20) return
-  previewT = t; $('op').playbackRate = t / obpm
-}
 function genPreview() {
   if (!audioBuf) return
   stopCountIn(); stopPreview(); stopVPreview()
+  let op = $('op')
+  try { if (!op.paused) op.pause() } catch(e) {}
   let t = getTargetBPM()
   if (!t || t < 20) return
-  previewT = t; let op = $('op')
-  op.playbackRate = t / obpm; op.play()
+  previewT = t; let ratio = t / obpm; segOrigStart = 0
+  if (Math.abs(ratio - 1) < 0.01) { if (origAudioUrl && op.src !== origAudioUrl) { op.src = origAudioUrl }; op.playbackRate = 1; op.play(); $('upb-btn').textContent = '⏸'; startProgTimer(); return }
+  let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
+  let dur = op.duration, pos = Math.max(0, op.currentTime || 0)
+  if (dur > 0 && pos >= dur) { pos = 0; op.currentTime = 0 }
+  let sr = audioBuf.sampleRate, segStart = Math.round(pos * sr)
+  let segLen = Math.min(audioBuf.length - segStart, Math.round(30 * sr))
+  if (segLen < 512) return
+  let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
+  for (let c = 0; c < audioBuf.numberOfChannels; c++) {
+    let s = audioBuf.getChannelData(c), d = seg.getChannelData(c)
+    for (let j = 0; j < segLen; j++) d[j] = s[segStart + j]
+  }
+  let stretched = Math.abs(ratio - 1) < 0.01 ? seg : timeStretch(seg, ratio); segOrigStart = pos
+  let src = ctx.createBufferSource()
+  src.buffer = stretched; src.connect(ctx.destination)
+  src.onended = playbackEnded
+  src.start(0); previewSrc = src; pStartTime = ctx.currentTime
   $('upb-btn').textContent = '⏸'; startProgTimer()
 }
 $('bps').oninput = () => {
@@ -236,48 +254,49 @@ $('bps').oninput = () => {
   if (audioBuf) { $('bpsv').textContent = v } else return
   if (obpm) { let p = Math.round(v / obpm * 100); $('pct').value = Math.max(30, Math.min(100, p)); $('pctv').textContent = $('pct').value + '%' }
 }
-$('bps').onchange = () => { if (!audioBuf || $('upb-btn').textContent !== '⏸') return; if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else updateSpeed() }
+$('bps').onchange = () => { if (!audioBuf || $('upb-btn').textContent !== '⏸') return; if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() }
 let sm = document.querySelectorAll('#sm button'); let am = document.querySelectorAll('#am button')
 sm.forEach(b => b.onclick = () => { sm.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('sb').style.display = b.dataset.m === 'bpm' ? 'block' : 'none'; $('sp').style.display = b.dataset.m === 'pct' ? 'block' : 'none'; void $('sp').offsetWidth; updateSliderDots(); if (audioBuf && $('upb-btn').textContent === '⏸') { if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() } })
 am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); b.classList.add('act'); $('ai').style.display = b.dataset.m === 'inst' ? 'block' : 'none'; if (audioBuf && $('upb-btn').textContent === '⏸') { if (b.dataset.m === 'inst') genVPreview(); else genPreview() } })
 
-let vPreviewSrc = null; let vPreviewTimer = null; let vPreviewVer = 0; let vStartTime = 0; let progTimer = null
+let vPreviewSrc = null; let vStartTime = 0; let progTimer = null; let vocalAudioPlayback = false
 $('vra').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸' && document.querySelector('#am .act').dataset.m === 'inst') genVPreview() }
 function genVPreview() {
   if (!audioBuf) return
-  stopCountIn()
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   if (audioBuf.numberOfChannels < 2) { err('单声道音频无法去人声'); return }
-  if (vPreviewTimer) clearTimeout(vPreviewTimer)
-  let off = vPreviewSrc ? Math.max(0, ctx.currentTime - vStartTime) : ($('op').duration ? $('op').currentTime : 0)
-  try { if (!$('op').paused) { $('op').pause() } } catch(e) {}
-  stopPreview()
-  let oldPT = previewT
-  vPreviewVer++; let myVer = vPreviewVer
-  vPreviewTimer = setTimeout(async () => {
-    vPreviewTimer = null; if (myVer !== vPreviewVer) return
-    try {
-      let processed = removeCenter(audioBuf, parseInt($('vra').value) / 100)
-      if (myVer !== vPreviewVer) return
-      let m = document.querySelector('#sm .act').dataset.m
-      let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
-      if (t && t >= 20) {
-        previewT = t
-        let ratio = t / obpm; if (ratio < 0.25) ratio = 0.25; if (ratio > 4) ratio = 4
-        processed = timeStretchFast(processed, ratio)
-        if (vPreviewSrc) off = off * oldPT / t
-        else off = off * obpm / t
-      }
-      if (myVer !== vPreviewVer) return
-      let src = ctx.createBufferSource()
-      src.buffer = processed; src.connect(ctx.destination)
-      src.onended = () => { if (vPreviewSrc === src) { vPreviewSrc = null; playbackEnded() } }
-      src.start(0, off)
-      if (vPreviewSrc) { try { vPreviewSrc.stop() } catch(e) {} vPreviewSrc = null }
-      vPreviewSrc = src; vStartTime = ctx.currentTime - off
-      $('upb-btn').textContent = '⏸'; startProgTimer()
-    } catch(e) {}
-  }, 100)
+  let op = $('op')
+  stopCountIn(); stopPreview(); stopVPreview()
+  try { if (!op.paused) op.pause() } catch(e) {}
+  let m = document.querySelector('#sm .act').dataset.m
+  let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
+  if (!t || t < 20) return
+  previewT = t; let ratio = t / obpm
+  if (ratio < 0.25) ratio = 0.25; if (ratio > 4) ratio = 4
+  let sr = audioBuf.sampleRate
+  let curPos = op.duration ? op.currentTime : 0
+  if (curPos >= op.duration) curPos = 0
+  let segStart = Math.round(curPos * sr)
+  let segLen = Math.min(audioBuf.length - segStart, Math.round(15 * sr))
+  if (segLen < 512) return
+  let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
+  for (let c = 0; c < audioBuf.numberOfChannels; c++) {
+    let s = audioBuf.getChannelData(c), d = seg.getChannelData(c)
+    for (let j = 0; j < segLen; j++) d[j] = s[segStart + j]
+  }
+  // Convert to Mid/Side, time-stretch both (phase vocoder preserves pitch),
+  // then scale Mid to remove vocals and convert back to L/R.
+  // This avoids independent L/R phase issues from ch-1 processing in timeStretch.
+  let ms = midSide(seg)
+  let msStretched = Math.abs(ratio - 1) < 0.01 ? ms : timeStretch(ms, ratio)
+  let processed = fromMidSide(msStretched, parseInt($('vra').value) / 100)
+  let src = ctx.createBufferSource()
+  src.buffer = processed; src.connect(ctx.destination)
+  src.onended = playbackEnded
+  src.start(0, 0)
+  previewSrc = src; pStartTime = ctx.currentTime
+  segOrigStart = curPos
+  $('upb-btn').textContent = '⏸'; startProgTimer()
 }
 
 $('go').onclick = async () => {
@@ -347,58 +366,136 @@ function tp(btn) {
 }
 
 function detectBpm(buf) {
-  let sr = buf.sampleRate, d = buf.getChannelData(0), hop = Math.floor(sr * 0.01)
-  let env = []
-  for (let i = 0; i + 1 < d.length; i += hop) {
-    let e = 0, n = 0, lim = Math.min(hop, d.length - i - 1)
-    for (let j = 0; j < lim; j++) { let t = d[i + j + 1] - d[i + j]; e += t * t; n++ }
-    env.push(Math.sqrt(e / n))
+  let sr = buf.sampleRate, ch = buf.numberOfChannels, n = buf.length
+  let maxN = Math.min(n, Math.round(25 * sr))
+  let mono = new Float32Array(maxN)
+  for (let c = 0; c < ch; c++) { let d = buf.getChannelData(c); for (let i = 0; i < maxN; i++) mono[i] += d[i] / ch }
+  // Spectral flux in 2 bands: low (0-250Hz, kick) + mid (250-2000Hz, snare/guitar)
+  let fftSize = 512, hop = Math.round(fftSize / 4)
+  let nf = Math.floor((maxN - fftSize) / hop) + 1
+  if (nf < 30) return null
+  let win = new Float32Array(fftSize)
+  for (let j = 0; j < fftSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fftSize))
+  let half = fftSize / 2
+  let lowBins = Math.min(half - 1, Math.round(250 / (sr / fftSize)))
+  let midBins = Math.min(half - 1, Math.round(2000 / (sr / fftSize)))
+  let onset = new Float32Array(nf)
+  let prevLow = new Float32Array(lowBins), prevMid = new Float32Array(midBins - lowBins)
+  let re = new Float32Array(fftSize), im = new Float32Array(fftSize)
+  for (let i = 0; i < nf; i++) {
+    let off = i * hop
+    for (let j = 0; j < fftSize; j++) { re[j] = mono[off + j] * win[j]; im[j] = 0 }
+    fft(re, im)
+    let lowFlux = 0, midFlux = 0
+    for (let j = 0; j < lowBins; j++) {
+      let mag = Math.sqrt(re[j] * re[j] + im[j] * im[j])
+      if (i > 0) lowFlux += Math.max(0, mag - prevLow[j])
+      prevLow[j] = mag
+    }
+    for (let j = lowBins; j < midBins; j++) {
+      let mag = Math.sqrt(re[j] * re[j] + im[j] * im[j])
+      if (i > 0) midFlux += Math.max(0, mag - prevMid[j - lowBins])
+      prevMid[j - lowBins] = mag
+    }
+    onset[i] = lowFlux * 0.5 + midFlux * 0.5
   }
-  let avg = 0; for (let v of env) avg += v; avg /= env.length
-  for (let i = 0; i < env.length; i++) env[i] -= avg
-  if (env.length < 50) return null
-  let minL = Math.round(60 / 300 * sr / hop), maxL = Math.round(60 / 40 * sr / hop)
-  let bestL = minL, bestS = 0
-  for (let lag = minL; lag <= maxL; lag++) {
-    let s = 0, n = 0
-    for (let i = 0; i + lag < env.length; i++) { s += env[i] * env[i + lag]; n++ }
-    s = n > 0 ? s / n : 0
-    if (s > bestS) { bestS = s; bestL = lag }
+  // Mean-center and normalize
+  let mo = 0; for (let v of onset) mo += v; mo /= onset.length
+  for (let i = 0; i < onset.length; i++) onset[i] -= mo
+  let mAbs = 0; for (let v of onset) { let a = Math.abs(v); if (a > mAbs) mAbs = a }
+  if (mAbs < 1e-10) return null
+  for (let i = 0; i < onset.length; i++) onset[i] /= mAbs
+  // Autocorrelation
+  let maxLag = Math.round(60 / 40 / (hop / sr))
+  if (maxLag >= onset.length) maxLag = onset.length - 1
+  let auto = new Float32Array(maxLag + 1)
+  for (let lag = 1; lag <= maxLag; lag++) {
+    let s = 0
+    for (let i = 0; i < onset.length - lag; i++) s += onset[i] * onset[i + lag]
+    auto[lag] = s / (onset.length - lag)
   }
-  let bpm = Math.round(60 / (bestL * hop / sr))
-  // Take top candidates and find the most plausible one
-  let cand = [{ lag: Math.round(bestL / 2), mul: 2 }, { lag: Math.round(bestL * 2 / 3), mul: 1.5 },
-    { lag: Math.round(bestL / 3), mul: 3 }, { lag: Math.round(bestL * 2), mul: 0.5 },
-    { lag: Math.round(bestL * 3 / 2), mul: 2/3 }]
-  for (let c of cand) {
-    if (c.lag < minL || c.lag > maxL) continue
-    let s = 0, n = 0
-    for (let i = 0; i + c.lag < env.length; i++) { s += env[i] * env[i + c.lag]; n++ }
-    s = n > 0 ? s / n : 0
-    if (s > bestS * 0.5) { let nb = Math.round(bpm * c.mul); if (nb >= 60 && nb <= 180) { bpm = nb; break } }
+  // Score with harmonic summation; aggressive 65% double-BPM threshold
+  let bestBpm = 120, bestScore = -1
+  for (let bpm = 40; bpm <= 200; bpm++) {
+    let T = Math.round(60 / bpm / (hop / sr))
+    if (T < 2 || T > maxLag) continue
+    let score = auto[T] || 0
+    if (T * 2 <= maxLag) score += (auto[T * 2] || 0) / 2
+    if (T * 3 <= maxLag) score += (auto[T * 3] || 0) / 3
+    if (T * 4 <= maxLag) score += (auto[T * 4] || 0) / 4
+    if (score > bestScore) { bestScore = score; bestBpm = bpm }
   }
-  return (bpm >= 40 && bpm <= 200) ? bpm : null
+  // Check if double BPM has >=65% of best score
+  let bpm2 = Math.min(200, bestBpm * 2)
+  let T2 = Math.round(60 / bpm2 / (hop / sr))
+  let T1 = Math.round(60 / bestBpm / (hop / sr))
+  if (T2 !== T1 && T2 >= 2 && T2 <= maxLag) {
+    let score2 = (auto[T2] || 0)
+    if (T2 * 2 <= maxLag) score2 += (auto[T2 * 2] || 0) / 2
+    if (T2 * 3 <= maxLag) score2 += (auto[T2 * 3] || 0) / 3
+    if (T2 * 4 <= maxLag) score2 += (auto[T2 * 4] || 0) / 4
+    if (score2 >= bestScore * 0.65) { bestBpm = bpm2 }
+  }
+  return Math.round(Math.max(40, Math.min(200, bestBpm)))
+}
+
+function detectSigScores(buf, bpm) {
+  let def = { sig: '4/4', s4: 0, s6: 0, s3: 0 }
+  if (!bpm || bpm < 40) return def
+  let sr = buf.sampleRate, ch = buf.numberOfChannels, n = buf.length
+  let maxN = Math.min(n, Math.round(15 * sr))
+  let mono = new Float32Array(maxN)
+  for (let c = 0; c < ch; c++) { let d = buf.getChannelData(c); for (let i = 0; i < maxN; i++) mono[i] += d[i] / ch }
+  // Energy envelope at 10ms resolution
+  let eHop = Math.round(sr * 0.01), wSize = Math.round(sr * 0.04)
+  let nf = Math.floor((maxN - wSize) / eHop) + 1
+  if (nf < 60) return def
+  let env = new Float32Array(nf)
+  for (let i = 0; i < nf; i++) {
+    let off = i * eHop, e = 0
+    for (let j = 0; j < wSize; j++) e += mono[off + j] * mono[off + j]
+    env[i] = Math.sqrt(e / wSize)
+  }
+  let me = 0; for (let v of env) me += v; me /= env.length
+  for (let i = 0; i < env.length; i++) env[i] -= me
+  let beatFrames = Math.round(60 / bpm / (eHop / sr))
+  if (beatFrames < 2) return def
+  // Find best phase alignment and accumulate beat energies
+  let best4 = 0, best3 = 0, best6 = 0
+  let bf = beatFrames
+  for (let ph = 0; ph < bf; ph++) {
+    // 4-beat accumulation
+    let s4 = [0, 0, 0, 0], c4 = 0
+    for (let m = ph; m + 4 * bf <= env.length; m += 4 * bf) {
+      for (let b = 0; b < 4; b++) s4[b] += env[m + b * bf]
+      c4++
+    }
+    if (c4 > 0) for (let b = 0; b < 4; b++) s4[b] /= c4
+    // 4/4: beat1 should be strongest, beat3 > beats2&4
+    let sc4 = s4[0] - (s4[1] + s4[2] + s4[3]) / 3 + (s4[0] + s4[2]) / 2 - (s4[1] + s4[3]) / 2
+    if (sc4 > best4) best4 = sc4
+    // 3-beat accumulation
+    let s3 = [0, 0, 0], c3 = 0
+    for (let m = ph; m + 3 * bf <= env.length; m += 3 * bf) {
+      for (let b = 0; b < 3; b++) s3[b] += env[m + b * bf]
+      c3++
+    }
+    if (c3 > 0) for (let b = 0; b < 3; b++) s3[b] /= c3
+    let sc3 = s3[0] - (s3[1] + s3[2]) / 2
+    if (sc3 > best3) best3 = sc3
+    // 6/8: beat2 > beat3 (medium accent on 4th 8th note)
+    let sc6 = sc3 + Math.abs(s3[1] - s3[2])
+    if (sc6 > best6) best6 = sc6
+  }
+  // 4/4 has strong bias: override only if another pattern is very clear
+  let sig = '4/4'
+  if (best6 > best4 + 0.15 && best6 > best3 + 0.05) sig = '6/8'
+  else if (best3 > best4 + 0.15) sig = '3/4'
+  return { sig, s4: best4, s6: best6, s3: best3 }
 }
 
 function detectSig(buf, bpm) {
-  if (!bpm || bpm < 40) return null
-  let sr = buf.sampleRate, d = buf.getChannelData(0)
-  let bl = Math.round(60 / bpm * sr)
-  if (bl < 100) return null
-  let energies = []
-  for (let i = 0; i + bl < d.length; i += bl) {
-    let e = 0; for (let j = 0; j < bl; j++) e += Math.abs(d[i + j])
-    energies.push(e / bl)
-  }
-  if (energies.length < 8) return null
-  let maxP = Math.min(6, Math.floor(energies.length / 2)), bestP = 4, bestS = 0
-  for (let p = 2; p <= maxP; p++) {
-    let s = 0, n = 0
-    for (let i = 0; i + p < energies.length; i++) { s += energies[i] * energies[i + p]; n++ }
-    s = n > 0 ? s / n : 0
-    if (s > bestS) { bestS = s; bestP = p }
-  }
-  return { 2: '2/4', 3: '3/4', 4: '4/4', 5: '5/4', 6: '6/8' }[bestP] || '4/4'
+  return detectSigScores(buf, bpm).sig || '4/4'
 }
 
 function fmt(s) { let m = Math.floor(s / 60), se = Math.floor(s % 60); return m + ':' + (se < 10 ? '0' : '') + se }
@@ -421,17 +518,19 @@ $('ap').addEventListener('ended', () => {
 
 let opDrag = false
 let seekRestart = () => {
-  if ($('upb-btn').textContent === '⏸' && vPreviewSrc) { stopVPreview(); genVPreview() }
+  if ($('upb-btn').textContent !== '⏸') return
+  stopAllPreviews(); stopCountIn()
+  if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview()
+  else genPreview()
 }
 function syncTimerPos() {
-  if (!(previewSrc || vPreviewSrc) || !actx) return
+  if (!previewSrc || !actx) return
   let m = document.querySelector('#sm .act').dataset.m
   let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
   if (!t || t < 20) return
   let opPos = $('op').currentTime || 0
   let newPStart = actx.currentTime - opPos * obpm / t
-  if (previewSrc) pStartTime = newPStart
-  else if (vPreviewSrc) vStartTime = newPStart
+  pStartTime = newPStart
 }
 $('upb').addEventListener('mousedown', e => { e.stopPropagation(); opDrag = true; $('upb').classList.add('dragging'); upbSeek(e); updateProgDisplay(); syncTimerPos() })
 document.addEventListener('mousemove', e => { if (opDrag) { e.preventDefault(); upbSeek(e); updateProgDisplay() } })
@@ -467,7 +566,7 @@ function startPlayback() {
 }
 function restartPlay() {
   if (!audioBuf) return
-  $('op').currentTime = 0; setProg(0); $('utm').textContent = '0:00 / ' + fmt($('op').duration || 0)
+  $('op').currentTime = 0; segOrigStart = 0; setProg(0); $('utm').textContent = '0:00 / ' + fmt($('op').duration || 0)
   if ($('upb-btn').textContent === '⏸') { stopAllPreviews(); if (countInOn) { playCountIn() } else { startPlayback() } }
 }
 function toggleCountIn() {
@@ -477,8 +576,12 @@ function toggleCountIn() {
 function getCountInBeats() {
   let n = parseInt(obSig.split('/')[0]); return isNaN(n) || n < 1 ? 4 : Math.min(n, 12)
 }
-let countInTimer = null
-function stopCountIn() { if (countInTimer) { clearTimeout(countInTimer); countInTimer = null } }
+let countInTimer = null, countInOscs = []
+function stopCountIn() {
+  if (countInTimer) { clearTimeout(countInTimer); countInTimer = null }
+  for (let o of countInOscs) { try { o.stop() } catch(e) {} }
+  countInOscs = []
+}
 function playCountIn() {
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   stopCountIn(); $('upb-btn').textContent = '⏸'; stopProgTimer()
@@ -492,12 +595,28 @@ function playCountIn() {
     osc.frequency.value = i === 0 ? 1200 : 880
     gain.gain.setValueAtTime(0.6, t2); gain.gain.exponentialRampToValueAtTime(0.001, t2 + 0.06)
     osc.connect(gain).connect(ctx.destination); osc.start(t2); osc.stop(t2 + 0.06)
+    countInOscs.push(osc)
   }
   setProg(0); $('utm').textContent = '预备 ' + beats + ' 拍'
   countInTimer = setTimeout(() => { countInTimer = null; startPlayback() }, beats * interval * 1000 + 100)
 }
 $('op').addEventListener('ended', playbackEnded)
 
+function midSide(buf) {
+  let ln = buf.length, sr = buf.sampleRate, out = actx.createBuffer(2, ln, sr)
+  let l = buf.getChannelData(0), r = buf.getChannelData(1)
+  let m = out.getChannelData(0), s = out.getChannelData(1)
+  for (let i = 0; i < ln; i++) { m[i] = (l[i] + r[i]) * 0.5; s[i] = (l[i] - r[i]) * 0.5 }
+  return out
+}
+function fromMidSide(ms, amt) {
+  let ln = ms.length, out = actx.createBuffer(2, ln, ms.sampleRate)
+  let m = ms.getChannelData(0), s = ms.getChannelData(1)
+  let l = out.getChannelData(0), r = out.getChannelData(1)
+  let g = 1 - amt
+  for (let i = 0; i < ln; i++) { let mid = m[i] * g; l[i] = mid + s[i]; r[i] = mid - s[i] }
+  return out
+}
 function removeCenter(buf, amt) {
   if (buf.numberOfChannels < 2) return buf
   let ln = buf.length, out = actx.createBuffer(2, ln, buf.sampleRate)
@@ -507,10 +626,11 @@ function removeCenter(buf, amt) {
   return out
 }
 
-function timeStretchFast(buf, sFactor) {
+function timeStretchFast(buf, sFactor, fSize) {
+  if (!fSize) fSize = 2048
   let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
   let newLen = Math.round(ln / sFactor), out = actx.createBuffer(ch, newLen, sr)
-  let fSize = 4096, aHop = Math.round(fSize / 8), sHop = Math.round(aHop / sFactor)
+  let aHop = Math.round(fSize / 4), sHop = Math.round(aHop / sFactor)
   let win = new Float32Array(fSize)
   for (let j = 0; j < fSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fSize))
   for (let c = 0; c < ch; c++) {
@@ -590,6 +710,8 @@ function timeStretch(buf, sFactor) {
           re[k] = mag * Math.cos(synPhase[k]); im[k] = mag * Math.sin(synPhase[k])
         }
       }
+      // Enforce conjugate symmetry for real-signal IFFT
+      for (let k = 1; k < half; k++) { re[fSize - k] = re[k]; im[fSize - k] = -im[k] }
       ifft(re, im)
       for (let j = 0; j < fSize; j++) { oup[sPos + j] += re[j] * win[j]; nrm[sPos + j] += win[j] * win[j] }
       aPos += aHop; sPos += sHop
