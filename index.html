@@ -499,15 +499,22 @@ function detectBpm(buf) {
       }
     }
   }
-  // 2/3比值替换：若 ≥100BPM 且存在 ≈2/3 的峰（比值差<0.04）、且其得分≥80%最佳分，替换为慢速峰
-  // 解决琶音/音符级周期性（如126BPM）掩盖真实拍点（如82BPM，二者成2/3比）的问题
+  // 峰比值替换：若 ≥100BPM，依次检查 2/3、1/2 比值峰
+  // 解决琶音级掩盖拍点(2/3) 或 倍速掩盖半速(1/2) 的问题
   if (bestBpm >= 100) {
+    let checks = [
+      { ratio: 2 / 3, thresh: 0.8 },
+      { ratio: 1 / 2, thresh: 0.5 },
+    ]
     let bestMatch = null
-    for (let p of peakBpms) {
-      if (p.bpm < bestBpm) {
-        let ratio = p.bpm / bestBpm
-        if (Math.abs(ratio - 2 / 3) < 0.04 && p.score >= bestScore * 0.8) {
-          if (!bestMatch || p.score > bestMatch.score) bestMatch = p
+    for (let chk of checks) {
+      if (bestMatch) break
+      for (let p of peakBpms) {
+        if (p.bpm < bestBpm) {
+          let r = p.bpm / bestBpm
+          if (Math.abs(r - chk.ratio) < 0.04 && p.score >= bestScore * chk.thresh) {
+            if (!bestMatch || p.score > bestMatch.score) bestMatch = p
+          }
         }
       }
     }
