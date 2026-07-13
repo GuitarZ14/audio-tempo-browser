@@ -504,7 +504,7 @@ function detectBpm(buf) {
   if (bestBpm >= 100) {
     let checks = [
       { ratio: 2 / 3, thresh: 0.8 },
-      { ratio: 1 / 2, thresh: 0.65 },
+      { ratio: 1 / 2, thresh: 0.70 },
     ]
     let bestMatch = null
     for (let chk of checks) {
