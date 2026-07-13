@@ -224,7 +224,7 @@ function getTargetBPM() {
 }
 function genPreview() {
   if (!audioBuf) return
-  stopCountIn(); stopPreview(); stopVPreview()
+  stopCountIn(); stopVPreview()
   let op = $('op')
   try { if (!op.paused) op.pause() } catch(e) {}
   let t = getTargetBPM()
@@ -243,6 +243,8 @@ function genPreview() {
     for (let j = 0; j < segLen; j++) d[j] = s[segStart + j]
   }
   let stretched = Math.abs(ratio - 1) < 0.01 ? seg : timeStretch(seg, ratio); segOrigStart = pos
+  // 处理完成后才停旧播放、启新播放，避免断音
+  stopPreview()
   let src = ctx.createBufferSource()
   src.buffer = stretched; src.connect(ctx.destination)
   src.onended = playbackEnded
@@ -266,7 +268,6 @@ function genVPreview() {
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   if (audioBuf.numberOfChannels < 2) { err('单声道音频无法去人声'); return }
   let op = $('op')
-  stopCountIn(); stopPreview(); stopVPreview()
   try { if (!op.paused) op.pause() } catch(e) {}
   let m = document.querySelector('#sm .act').dataset.m
   let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
@@ -290,6 +291,8 @@ function genVPreview() {
   let ms = midSide(seg)
   let msStretched = Math.abs(ratio - 1) < 0.01 ? ms : timeStretch(ms, ratio)
   let processed = fromMidSide(msStretched, parseInt($('vra').value) / 100)
+  // 处理完成后才停旧播放、启新播放
+  stopPreview(); stopVPreview()
   let src = ctx.createBufferSource()
   src.buffer = processed; src.connect(ctx.destination)
   src.onended = playbackEnded
