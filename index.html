@@ -218,7 +218,21 @@ function startProgTimer() {
   }, 200)
 }
 function setProg(pct) { let v = Math.min(100, Math.max(0, pct)); $('upi').style.width = v + '%'; $('upthumb').style.left = v + '%' }
-function playbackEnded() { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
+function playbackEnded() {
+  // 段播放完毕，检查是否还有剩余音频需要接续
+  if (audioBuf && previewT) {
+    let op = $('op'), tgt = getTargetBPM()
+    if (tgt && Math.abs(tgt / obpm - 1) >= 0.01) {
+      let remain = (op.duration || audioBuf.duration / audioBuf.sampleRate) - (op.currentTime || 0)
+      if (remain > 1) {
+        if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview()
+        else genPreview()
+        return
+      }
+    }
+  }
+  $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer()
+}
 function getTargetBPM() {
   let m = document.querySelector('#sm .act').dataset.m
   return m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
@@ -236,7 +250,7 @@ function genPreview() {
   let dur = op.duration, pos = Math.max(0, op.currentTime || 0)
   if (dur > 0 && pos >= dur) { pos = 0; op.currentTime = 0 }
   let sr = audioBuf.sampleRate, segStart = Math.round(pos * sr)
-  let segLen = audioBuf.length - segStart
+  let segLen = Math.min(audioBuf.length - segStart, Math.round(30 * sr))
   if (segLen < 512) return
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
@@ -279,7 +293,7 @@ function genVPreview() {
   let curPos = op.duration ? op.currentTime : 0
   if (curPos >= op.duration) curPos = 0
   let segStart = Math.round(curPos * sr)
-  let segLen = audioBuf.length - segStart
+  let segLen = Math.min(audioBuf.length - segStart, Math.round(15 * sr))
   if (segLen < 512) return
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
