@@ -453,16 +453,34 @@ function detectBpm(buf) {
     let e = 0; for (let j = 0; j < fftSize; j++) e += mono[off + j] * mono[off + j]
     energyOnset[i] = Math.sqrt(e / fftSize)
   }
-  // 合并谱通量+能量变化
-  for (let i = 1; i < nf; i++) {
-    let eDiff = Math.max(0, energyOnset[i] - energyOnset[i - 1])
-    onset[i] = onset[i] * 0.6 + eDiff * 0.4
-  }
-  // 跳过第一帧（始终为0），归一化到[-1,1]
+  // 分别归一化谱通量和能量包络，合并，再归一化
   let mo = 0
   for (let i = 1; i < nf; i++) mo += onset[i]
   mo /= (nf - 1)
   let mA = 0
+  for (let i = 1; i < nf; i++) { let d = onset[i] - mo; onset[i] = d; let a = Math.abs(d); if (a > mA) mA = a }
+  if (mA < 1e-10) return null
+  for (let i = 1; i < nf; i++) onset[i] /= mA
+
+  let em = 0
+  for (let i = 0; i < nf; i++) em += energyOnset[i]
+  em /= nf
+  let eA = 0
+  for (let i = 0; i < nf; i++) { let d = energyOnset[i] - em; energyOnset[i] = d; let a = Math.abs(d); if (a > eA) eA = a }
+  if (eA > 1e-10) for (let i = 0; i < nf; i++) energyOnset[i] /= eA
+
+  for (let i = nf - 1; i >= 1; i--) energyOnset[i] = Math.max(0, energyOnset[i] - energyOnset[i - 1])
+  energyOnset[0] = 0
+  eA = 0
+  for (let i = 0; i < nf; i++) { let a = Math.abs(energyOnset[i]); if (a > eA) eA = a }
+  if (eA > 1e-10) for (let i = 0; i < nf; i++) energyOnset[i] /= eA
+
+  for (let i = 0; i < nf; i++) onset[i] = onset[i] * 0.7 + energyOnset[i] * 0.3
+
+  mo = 0
+  for (let i = 1; i < nf; i++) mo += onset[i]
+  mo /= (nf - 1)
+  mA = 0
   for (let i = 1; i < nf; i++) { let d = onset[i] - mo; onset[i] = d; let a = Math.abs(d); if (a > mA) mA = a }
   if (mA < 1e-10) return null
   for (let i = 1; i < nf; i++) onset[i] /= mA
