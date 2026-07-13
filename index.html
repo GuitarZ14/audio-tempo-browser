@@ -370,32 +370,39 @@ function tp(btn) {
 
 function detectBpm(buf) {
   let sr = buf.sampleRate, ch = buf.numberOfChannels, n = buf.length
-  console.log('detectBpm: sr=' + sr + ' ch=' + ch + ' n=' + n)
   let maxN = Math.min(n, Math.round(25 * sr))
   let mono = new Float32Array(maxN)
   for (let c = 0; c < ch; c++) { let d = buf.getChannelData(c); for (let i = 0; i < maxN; i++) mono[i] += d[i] / ch }
-  // Method 1: RMS energy envelope autocorrelation (robust to dense guitar)
-  let hop = Math.round(sr * 0.01), wSize = Math.round(sr * 0.03)
-  let nf = Math.floor((maxN - wSize) / hop) + 1
-  console.log('detectBpm: nf=' + nf)
-  if (nf < 30) return null
-  let env = new Float32Array(nf)
-  for (let i = 0; i < nf; i++) {
-    let off = i * hop, e = 0
-    for (let j = 0; j < wSize; j++) e += mono[off + j] * mono[off + j]
-    env[i] = Math.sqrt(e / wSize)
-  }
-  // Onset = first difference (captures transients)
+  // 全频段谱通量
+  let fftSize = 1024, hop = Math.round(fftSize / 2)
+  let nf = Math.floor((maxN - fftSize) / hop) + 1
+  if (nf < 20) return null
+  let win = new Float32Array(fftSize)
+  for (let j = 0; j < fftSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fftSize))
   let onset = new Float32Array(nf)
+  let prevMag = new Float32Array(fftSize >> 1)
+  let re = new Float32Array(fftSize), im = new Float32Array(fftSize)
+  for (let i = 0; i < nf; i++) {
+    let off = i * hop
+    for (let j = 0; j < fftSize; j++) { re[j] = mono[off + j] * win[j]; im[j] = 0 }
+    fft(re, im)
+    let flux = 0
+    for (let j = 0; j < fftSize / 2; j++) {
+      let mag = Math.sqrt(re[j] * re[j] + im[j] * im[j])
+      if (i > 0) flux += Math.max(0, mag - prevMag[j])
+      prevMag[j] = mag
+    }
+    onset[i] = flux
+  }
+  // 跳过第一帧（始终为0），归一化到[-1,1]
   let mo = 0
-  for (let i = 1; i < nf; i++) { onset[i] = env[i] - env[i-1]; mo += onset[i] }
+  for (let i = 1; i < nf; i++) mo += onset[i]
   mo /= (nf - 1)
-  // Normalize onset to [-1, 1]
-  let mAbs = 0
-  for (let i = 1; i < nf; i++) { onset[i] -= mo; let a = Math.abs(onset[i]); if (a > mAbs) mAbs = a }
-  if (mAbs < 1e-10) return null
-  for (let i = 1; i < nf; i++) onset[i] /= mAbs
-  // Autocorrelation
+  let mA = 0
+  for (let i = 1; i < nf; i++) { let d = onset[i] - mo; onset[i] = d; let a = Math.abs(d); if (a > mA) mA = a }
+  if (mA < 1e-10) return null
+  for (let i = 1; i < nf; i++) onset[i] /= mA
+  // 自相关
   let maxLag = Math.round(60 / 40 / (hop / sr))
   if (maxLag >= nf) maxLag = nf - 1
   let auto = new Float32Array(maxLag + 1)
@@ -404,30 +411,42 @@ function detectBpm(buf) {
     for (let i = 1; i < nf - lag; i++) s += onset[i] * onset[i + lag]
     auto[lag] = s / (nf - lag - 1)
   }
-  // Find peaks in autocorrelation with harmonic summation
-  let bestBpm = 120, bestScore = -1, bestT = 0
+  // 谐波求和打分
+  let bestBpm = 120, bestScore = -Infinity
   for (let bpm = 40; bpm <= 200; bpm++) {
     let T = Math.round(60 / bpm / (hop / sr))
-    if (T < 3 || T > maxLag) continue
+    if (T < 2 || T > maxLag) continue
     let score = auto[T] || 0
     if (T * 2 <= maxLag) score += (auto[T * 2] || 0) / 2
     if (T * 3 <= maxLag) score += (auto[T * 3] || 0) / 3
-    if (score > bestScore) { bestScore = score; bestBpm = bpm; bestT = T }
+    if (T * 4 <= maxLag) score += (auto[T * 4] || 0) / 4
+    if (score > bestScore) { bestScore = score; bestBpm = bpm }
   }
-  console.log('detectBpm: bestBpm=' + bestBpm + ' bestScore=' + bestScore + ' T=' + bestT)
-  // Double-BPM check (catch half-tempo)
+  // 倍速检测（50%阈值防半速陷阱）
   let bpm2 = Math.min(200, bestBpm * 2)
-  let T2 = Math.round(60 / bpm2 / (hop / sr))
-  if (T2 >= 3 && T2 !== bestT && T2 <= maxLag) {
-    let score2 = (auto[T2] || 0)
-    if (T2 * 2 <= maxLag) score2 += (auto[T2 * 2] || 0) / 2
-    if (T2 * 3 <= maxLag) score2 += (auto[T2 * 3] || 0) / 3
-    console.log('detectBpm: double-check bpm2=' + bpm2 + ' score2=' + score2 + ' threshold=' + (bestScore * 0.6))
-    if (score2 >= bestScore * 0.6) { bestBpm = bpm2; console.log('detectBpm: using double BPM ' + bpm2) }
+  if (bpm2 !== bestBpm) {
+    let T2 = Math.round(60 / bpm2 / (hop / sr))
+    if (T2 >= 2 && T2 <= maxLag) {
+      let score2 = (auto[T2] || 0)
+      if (T2 * 2 <= maxLag) score2 += (auto[T2 * 2] || 0) / 2
+      if (T2 * 3 <= maxLag) score2 += (auto[T2 * 3] || 0) / 3
+      if (T2 * 4 <= maxLag) score2 += (auto[T2 * 4] || 0) / 4
+      if (score2 >= bestScore * 0.5) bestBpm = bpm2
+    }
   }
-  let result = Math.round(Math.max(40, Math.min(200, bestBpm)))
-  console.log('detectBpm: result=' + result)
-  return result
+  // 三倍速检测（防40→120等）
+  let bpm3 = Math.min(200, bestBpm * 3)
+  if (bpm3 !== bestBpm && bpm3 !== bpm2) {
+    let T3 = Math.round(60 / bpm3 / (hop / sr))
+    if (T3 >= 2 && T3 <= maxLag) {
+      let score3 = (auto[T3] || 0)
+      if (T3 * 2 <= maxLag) score3 += (auto[T3 * 2] || 0) / 2
+      if (T3 * 3 <= maxLag) score3 += (auto[T3 * 3] || 0) / 3
+      if (T3 * 4 <= maxLag) score3 += (auto[T3 * 4] || 0) / 4
+      if (score3 >= bestScore * 0.35) bestBpm = bpm3
+    }
+  }
+  return Math.round(Math.max(40, Math.min(200, bestBpm)))
 }
 
 function detectSigScores(buf, bpm) {
