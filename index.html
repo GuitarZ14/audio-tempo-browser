@@ -156,7 +156,7 @@ async function processFile(f) {
   file = f; bn = f.name.replace(/\.[^.]+$/, '')
   hideErr(); audioBuf = null
   $('uic').style.display = 'none'; $('utx').style.display = 'none'; $('unt').style.display = 'none'
-  $('fi').style.display = 'block'; $('fin').textContent = f.name + ' [DEPLOY_20260713]'; $('utm').textContent = '0:00 / 0:00'; setProg(0)
+  $('fi').style.display = 'block'; $('fin').textContent = f.name; $('utm').textContent = '0:00 / 0:00'; setProg(0)
   try {
     let buf = await getActx().decodeAudioData(await f.arrayBuffer())
     audioBuf = buf
