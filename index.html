@@ -474,14 +474,18 @@ function detectBpm(buf) {
     if (T * 3 <= maxLag) score += (auto[T * 3] || 0) / 3
     if (T * 4 <= maxLag) score += (auto[T * 4] || 0) / 4
     scoreMap[bpm] = score
-    if (score > bestScore) { bestScore = score; bestBpm = bpm }
+    if (score > bestScore || (score >= bestScore * 0.95 && bpm < bestBpm)) { bestScore = score; bestBpm = bpm }
   }
-  // 备选池：原始BPM + 倍速（防半速陷阱）+ 半速（防8分/16分干扰）
+  // 备选池：原始 + 2/3倍 + 3/2倍 + 倍速 + 半速
   let candidates = [{ bpm: bestBpm, score: bestScore }]
   let up = Math.min(200, bestBpm * 2)
   if (up !== bestBpm && scoreMap[up] >= bestScore * 0.5) candidates.push({ bpm: up, score: scoreMap[up] })
   let dn = Math.max(40, Math.round(bestBpm / 2))
   if (dn !== bestBpm && scoreMap[dn] >= bestScore * 0.5) candidates.push({ bpm: dn, score: scoreMap[dn] })
+  let t23 = Math.round(bestBpm * 2 / 3)
+  if (t23 >= 40 && t23 !== bestBpm && scoreMap[t23] >= bestScore * 0.5) candidates.push({ bpm: t23, score: scoreMap[t23] })
+  let t32 = Math.min(200, Math.round(bestBpm * 3 / 2))
+  if (t32 >= 40 && t32 !== bestBpm && t32 !== t23 && scoreMap[t32] >= bestScore * 0.5) candidates.push({ bpm: t32, score: scoreMap[t32] })
   candidates.sort((a, b) => b.score - a.score)
   bestBpm = candidates[0].bpm
   return Math.round(Math.max(40, Math.min(200, bestBpm)))
