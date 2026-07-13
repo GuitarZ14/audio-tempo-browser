@@ -77,12 +77,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="card">
 <div class="ul" id="ul">
 <div class="ic" id="uic">📁</div>
-<div class="tx" id="utx">点击选择音频文件</div>
+<div class="tx" id="utx">点击更换音频文件</div>
 <div class="nt" id="unt">支持 MP3 / WAV / M4A</div>
 <div class="fi" id="fi" style="display:none">
  <div class="ap-pb" id="upb" style="margin-top:0"><div class="ap-pb-in" id="upi"></div><div id="upthumb"></div></div>
- <div style="display:flex;align-items:center;gap:10px;margin-top:18px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:8px 14px;border-radius:16px;font-size:18px;line-height:1">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:8px 22px;border-radius:16px;font-size:18px;line-height:1">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px;color:#a0aec0">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:6px 12px;border-radius:14px;font-size:13px">选取音频文件</button></div>
- <div style="font-size:11px;color:#718096;margin-top:2px;display:flex;align-items:center;justify-content:space-between"><span id="bpmn"></span><button id="ci-btn" onclick="event.stopPropagation();toggleCountIn()" title="开启预备拍"><span class="ci-ic">⏲</span>开启预备拍</button></div>
+ <div style="display:flex;align-items:center;gap:10px;margin-top:18px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:8px 14px;border-radius:16px;font-size:18px;line-height:1">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:8px 22px;border-radius:16px;font-size:18px;line-height:1">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px;color:#a0aec0">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:6px 12px;border-radius:14px;font-size:13px">更换音频文件</button></div>
+  <div style="font-size:11px;color:#718096;margin-top:2px"><span id="bpmn"></span></div>
+  <div style="margin-top:6px;text-align:left"><button id="ci-btn" onclick="event.stopPropagation();toggleCountIn()" title="开启预备拍"><span class="ci-ic">⏲</span>开启预备拍</button></div>
 </div>
 </div>
 <input type="file" id="gi" accept=".mp3,.wav,.m4a,.aac,.ogg" hidden>
