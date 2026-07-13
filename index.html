@@ -163,7 +163,7 @@ async function processFile(f) {
       obpm = bpm
       let sigScores = detectSigScores(buf, bpm)
       obSig = sigScores.sig || '4/4'
-      $('bpmn').textContent = '⏱ ' + obpm + ' BPM · ' + obSig + ' [4:' + sigScores.s4.toFixed(2) + ' 6:' + sigScores.s6.toFixed(2) + ' 3:' + sigScores.s3.toFixed(2) + ']'
+      $('bpmn').textContent = '⏱ ' + obpm + ' BPM · ' + obSig
     } else { obpm = 120; $('bpmn').textContent = 'BPM 检测失败，默认 120' }
     $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').max = obpm; $('bps').value = obpm; $('bpsv').textContent = obpm; updateSliderDots()
     let op = $('op'); if (op.src) URL.revokeObjectURL(op.src)
