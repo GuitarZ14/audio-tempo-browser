@@ -211,7 +211,7 @@ function startProgTimer() {
           $('utm').textContent = fmt(origCur) + ' / ' + fmt(dur)
           if (origCur >= dur && dur > 0) { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
           // 段尾预计算下一段（消除接续时的咔声）
-          if (!nextSegBuffer && segDuration - cur < 2 && segDuration - cur > 0) precomputeNextSegment()
+          if (!nextSegBuffer && segDuration - cur < 3 && segDuration - cur > 0) precomputeNextSegment()
           return
         }
       }
@@ -229,7 +229,7 @@ function precomputeNextSegment() {
   if (remain < 1.5) return
   let tgt = previewT, ratio = tgt / obpm, sr = audioBuf.sampleRate
   let isInst = document.querySelector('#am .act').dataset.m === 'inst'
-  let segLen = Math.min(audioBuf.length - Math.round(pos * sr), Math.round(isInst ? 15 * sr : 30 * sr))
+  let segLen = Math.min(audioBuf.length - Math.round(pos * sr), Math.round(isInst ? 15 * sr : 45 * sr))
   if (segLen < 512) return
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
@@ -251,12 +251,19 @@ function playBuffer(buf, origPos) {
   segOrigStart = origPos
   let src = ctx.createBufferSource()
   src.buffer = buf
-  src.connect(ctx.destination)
+  let gain = ctx.createGain()
+  let dur = buf.length / buf.sampleRate
+  let fade = 0.005
+  gain.gain.setValueAtTime(0, 0)
+  gain.gain.linearRampToValueAtTime(1, fade)
+  gain.gain.setValueAtTime(1, dur - fade)
+  gain.gain.linearRampToValueAtTime(0, dur)
+  src.connect(gain).connect(ctx.destination)
   src.onended = playbackEnded
   src.start(0)
   previewSrc = src
   pStartTime = ctx.currentTime
-  segDuration = buf.length / buf.sampleRate
+  segDuration = dur
   $('upb-btn').textContent = '⏸'
   startProgTimer()
 }
@@ -298,7 +305,7 @@ function genPreview() {
   let dur = op.duration, pos = Math.max(0, op.currentTime || 0)
   if (dur > 0 && pos >= dur) { pos = 0; op.currentTime = 0 }
   let sr = audioBuf.sampleRate, segStart = Math.round(pos * sr)
-  let segLen = Math.min(audioBuf.length - segStart, Math.round(30 * sr))
+  let segLen = Math.min(audioBuf.length - segStart, Math.round(45 * sr))
   if (segLen < 512) return
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
