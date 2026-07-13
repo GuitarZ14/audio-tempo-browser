@@ -413,6 +413,7 @@ function detectBpm(buf) {
     auto[lag] = s / (nf - lag - 1)
   }
   // 谐波求和打分
+  let scoreMap = new Array(201).fill(0)
   let bestBpm = 120, bestScore = -Infinity
   for (let bpm = 40; bpm <= 200; bpm++) {
     let T = Math.round(60 / bpm / (hop / sr))
@@ -421,47 +422,17 @@ function detectBpm(buf) {
     if (T * 2 <= maxLag) score += (auto[T * 2] || 0) / 2
     if (T * 3 <= maxLag) score += (auto[T * 3] || 0) / 3
     if (T * 4 <= maxLag) score += (auto[T * 4] || 0) / 4
+    scoreMap[bpm] = score
     if (score > bestScore) { bestScore = score; bestBpm = bpm }
   }
-  let origBestBpm = bestBpm, origBestScore = bestScore
-  // 倍速检测（50%阈值防半速陷阱）
-  let bpm2 = Math.min(200, bestBpm * 2)
-  if (bpm2 !== bestBpm) {
-    let T2 = Math.round(60 / bpm2 / (hop / sr))
-    if (T2 >= 2 && T2 <= maxLag) {
-      let score2 = (auto[T2] || 0)
-      if (T2 * 2 <= maxLag) score2 += (auto[T2 * 2] || 0) / 2
-      if (T2 * 3 <= maxLag) score2 += (auto[T2 * 3] || 0) / 3
-      if (T2 * 4 <= maxLag) score2 += (auto[T2 * 4] || 0) / 4
-      if (score2 >= bestScore * 0.5) { bestBpm = bpm2; bestScore = score2 }
-    }
-  }
-  // 三倍速检测（防40→120等）
-  let bpm3 = Math.min(200, bestBpm * 3)
-  if (bpm3 !== bestBpm && bpm3 !== bpm2) {
-    let T3 = Math.round(60 / bpm3 / (hop / sr))
-    if (T3 >= 2 && T3 <= maxLag) {
-      let score3 = (auto[T3] || 0)
-      if (T3 * 2 <= maxLag) score3 += (auto[T3 * 2] || 0) / 2
-      if (T3 * 3 <= maxLag) score3 += (auto[T3 * 3] || 0) / 3
-      if (T3 * 4 <= maxLag) score3 += (auto[T3 * 4] || 0) / 4
-      if (score3 >= bestScore * 0.35) { bestBpm = bpm3; bestScore = score3 }
-    }
-  }
-  // 半速检测（仅当被倍速检测推高后才执行，防8分/16分把结果推太高）
-  if (bestBpm > origBestBpm) {
-    let halfBpm = Math.max(40, Math.round(origBestBpm / 2))
-    if (halfBpm !== origBestBpm) {
-      let Th = Math.round(60 / halfBpm / (hop / sr))
-      if (Th >= 2 && Th <= maxLag) {
-        let scoreHalf = (auto[Th] || 0)
-        if (Th * 2 <= maxLag) scoreHalf += (auto[Th * 2] || 0) / 2
-        if (Th * 3 <= maxLag) scoreHalf += (auto[Th * 3] || 0) / 3
-        if (Th * 4 <= maxLag) scoreHalf += (auto[Th * 4] || 0) / 4
-        if (scoreHalf >= origBestScore * 0.8) bestBpm = halfBpm
-      }
-    }
-  }
+  // 备选池：原始BPM + 倍速（防半速陷阱）+ 半速（防8分/16分干扰）
+  let candidates = [{ bpm: bestBpm, score: bestScore }]
+  let up = Math.min(200, bestBpm * 2)
+  if (up !== bestBpm && scoreMap[up] >= bestScore * 0.5) candidates.push({ bpm: up, score: scoreMap[up] })
+  let dn = Math.max(40, Math.round(bestBpm / 2))
+  if (dn !== bestBpm && scoreMap[dn] >= bestScore * 0.5) candidates.push({ bpm: dn, score: scoreMap[dn] })
+  candidates.sort((a, b) => b.score - a.score)
+  bestBpm = candidates[0].bpm
   return Math.round(Math.max(40, Math.min(200, bestBpm)))
 }
 
