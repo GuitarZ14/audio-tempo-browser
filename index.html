@@ -425,13 +425,14 @@ function detectBpm(buf) {
   let maxN = Math.min(n, Math.round(25 * sr))
   let mono = new Float32Array(maxN)
   for (let c = 0; c < ch; c++) { let d = buf.getChannelData(c); for (let i = 0; i < maxN; i++) mono[i] += d[i] / ch }
-  // 全频段谱通量
+  // 全频段谱通量 + 低频加权(Guitar指弹低频更体现拍点)
   let fftSize = 1024, hop = Math.round(fftSize / 2)
   let nf = Math.floor((maxN - fftSize) / hop) + 1
   if (nf < 20) return null
   let win = new Float32Array(fftSize)
   for (let j = 0; j < fftSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fftSize))
   let onset = new Float32Array(nf)
+  let energyOnset = new Float32Array(nf)
   let prevMag = new Float32Array(fftSize >> 1)
   let re = new Float32Array(fftSize), im = new Float32Array(fftSize)
   for (let i = 0; i < nf; i++) {
@@ -441,10 +442,21 @@ function detectBpm(buf) {
     let flux = 0
     for (let j = 0; j < fftSize / 2; j++) {
       let mag = Math.sqrt(re[j] * re[j] + im[j] * im[j])
-      if (i > 0) flux += Math.max(0, mag - prevMag[j])
+      if (i > 0) {
+        let diff = Math.max(0, mag - prevMag[j])
+        flux += j < 5 ? diff * 3 : diff  // 低5bin(≈215Hz以下)加权3倍
+      }
       prevMag[j] = mag
     }
     onset[i] = flux
+    // 能量包络
+    let e = 0; for (let j = 0; j < fftSize; j++) e += mono[off + j] * mono[off + j]
+    energyOnset[i] = Math.sqrt(e / fftSize)
+  }
+  // 合并谱通量+能量变化
+  for (let i = 1; i < nf; i++) {
+    let eDiff = Math.max(0, energyOnset[i] - energyOnset[i - 1])
+    onset[i] = onset[i] * 0.6 + eDiff * 0.4
   }
   // 跳过第一帧（始终为0），归一化到[-1,1]
   let mo = 0
