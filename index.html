@@ -160,12 +160,14 @@ async function processFile(f) {
   try {
     let buf = await getActx().decodeAudioData(await f.arrayBuffer())
     audioBuf = buf
+    console.log('BPM: calling detectBpm')
     let bpm = detectBpm(buf)
+    console.log('BPM: result=' + bpm + ' scan=' + window.__dbgScanBpm + ' peaks=' + (window.__dbgPeaks ? window.__dbgPeaks.length : 0))
     if (bpm) {
       obpm = bpm
       let sigScores = detectSigScores(buf, bpm)
       obSig = sigScores.sig || '4/4'
-      $('bpmn').textContent = '⏱ ' + Math.round(obpm) + ' BPM · ' + obSig
+      $('bpmn').textContent = '⏱ ' + Math.round(obpm) + ' BPM · ' + obSig + ' [v4]'
     } else { obpm = 120; $('bpmn').textContent = 'BPM 检测失败，默认 120' }
     $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').max = obpm; $('bps').value = obpm; $('bpsv').textContent = obpm; updateSliderDots()
     let op = $('op'); if (op.src) URL.revokeObjectURL(op.src)
@@ -421,18 +423,18 @@ function tp(btn) {
 }
 
 function detectBpm(buf) {
+  console.log('detectBpm ENTERED, sr=' + buf.sampleRate + ' ch=' + buf.numberOfChannels + ' n=' + buf.length)
   let sr = buf.sampleRate, ch = buf.numberOfChannels, n = buf.length
   let maxN = Math.min(n, Math.round(25 * sr))
   let mono = new Float32Array(maxN)
   for (let c = 0; c < ch; c++) { let d = buf.getChannelData(c); for (let i = 0; i < maxN; i++) mono[i] += d[i] / ch }
-  // 全频段谱通量 + 低频加权(Guitar指弹低频更体现拍点)
+  // 全频段谱通量
   let fftSize = 1024, hop = Math.round(fftSize / 2)
   let nf = Math.floor((maxN - fftSize) / hop) + 1
   if (nf < 20) return null
   let win = new Float32Array(fftSize)
   for (let j = 0; j < fftSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fftSize))
   let onset = new Float32Array(nf)
-  let energyOnset = new Float32Array(nf)
   let prevMag = new Float32Array(fftSize >> 1)
   let re = new Float32Array(fftSize), im = new Float32Array(fftSize)
   for (let i = 0; i < nf; i++) {
@@ -442,45 +444,16 @@ function detectBpm(buf) {
     let flux = 0
     for (let j = 0; j < fftSize / 2; j++) {
       let mag = Math.sqrt(re[j] * re[j] + im[j] * im[j])
-      if (i > 0) {
-        let diff = Math.max(0, mag - prevMag[j])
-        flux += j < 5 ? diff * 3 : diff  // 低5bin(≈215Hz以下)加权3倍
-      }
+      if (i > 0) flux += Math.max(0, mag - prevMag[j])
       prevMag[j] = mag
     }
     onset[i] = flux
-    // 能量包络
-    let e = 0; for (let j = 0; j < fftSize; j++) e += mono[off + j] * mono[off + j]
-    energyOnset[i] = Math.sqrt(e / fftSize)
   }
-  // 分别归一化谱通量和能量包络，合并，再归一化
+  // 归一化
   let mo = 0
   for (let i = 1; i < nf; i++) mo += onset[i]
   mo /= (nf - 1)
   let mA = 0
-  for (let i = 1; i < nf; i++) { let d = onset[i] - mo; onset[i] = d; let a = Math.abs(d); if (a > mA) mA = a }
-  if (mA < 1e-10) return null
-  for (let i = 1; i < nf; i++) onset[i] /= mA
-
-  let em = 0
-  for (let i = 0; i < nf; i++) em += energyOnset[i]
-  em /= nf
-  let eA = 0
-  for (let i = 0; i < nf; i++) { let d = energyOnset[i] - em; energyOnset[i] = d; let a = Math.abs(d); if (a > eA) eA = a }
-  if (eA > 1e-10) for (let i = 0; i < nf; i++) energyOnset[i] /= eA
-
-  for (let i = nf - 1; i >= 1; i--) energyOnset[i] = Math.max(0, energyOnset[i] - energyOnset[i - 1])
-  energyOnset[0] = 0
-  eA = 0
-  for (let i = 0; i < nf; i++) { let a = Math.abs(energyOnset[i]); if (a > eA) eA = a }
-  if (eA > 1e-10) for (let i = 0; i < nf; i++) energyOnset[i] /= eA
-
-  for (let i = 0; i < nf; i++) onset[i] = onset[i] * 0.7 + energyOnset[i] * 0.3
-
-  mo = 0
-  for (let i = 1; i < nf; i++) mo += onset[i]
-  mo /= (nf - 1)
-  mA = 0
   for (let i = 1; i < nf; i++) { let d = onset[i] - mo; onset[i] = d; let a = Math.abs(d); if (a > mA) mA = a }
   if (mA < 1e-10) return null
   for (let i = 1; i < nf; i++) onset[i] /= mA
@@ -493,31 +466,61 @@ function detectBpm(buf) {
     for (let i = 1; i < nf - lag; i++) s += onset[i] * onset[i + lag]
     auto[lag] = s / (nf - lag - 1)
   }
-  // 谐波求和打分
+  // 窗口扫描：每个BPM检查 T-1/T/T+1 三档lag，取谐波求和最高分
+  // 解决 T=round(60/bpm/hop*sr) 因取整错过真实峰位的问题
   let scoreMap = new Array(201).fill(0)
   let bestBpm = 120, bestScore = -Infinity
   for (let bpm = 40; bpm <= 200; bpm++) {
     let T = Math.round(60 / bpm / (hop / sr))
     if (T < 2 || T > maxLag) continue
-    let score = auto[T] || 0
-    if (T * 2 <= maxLag) score += (auto[T * 2] || 0) / 2
-    if (T * 3 <= maxLag) score += (auto[T * 3] || 0) / 3
-    if (T * 4 <= maxLag) score += (auto[T * 4] || 0) / 4
-    scoreMap[bpm] = score
-    if (score > bestScore || (score >= bestScore * 0.95 && bpm < bestBpm)) { bestScore = score; bestBpm = bpm }
+    let bestV = -Infinity
+    for (let dt = -1; dt <= 1; dt++) {
+      let t = T + dt
+      if (t < 2 || t > maxLag) continue
+      let score = auto[t] || 0
+      if (t * 2 <= maxLag) score += (auto[t * 2] || 0) / 2
+      if (t * 3 <= maxLag) score += (auto[t * 3] || 0) / 3
+      if (t * 4 <= maxLag) score += (auto[t * 4] || 0) / 4
+      if (score > bestV) bestV = score
+    }
+    scoreMap[bpm] = bestV
+    if (bestV > bestScore || (bestV >= bestScore * 0.95 && bpm < bestBpm)) {
+      bestScore = bestV; bestBpm = bpm
+    }
   }
-  // 备选池：原始 + 2/3倍 + 3/2倍 + 倍速 + 半速
-  let candidates = [{ bpm: bestBpm, score: bestScore }]
-  let up = Math.min(200, bestBpm * 2)
-  if (up !== bestBpm && scoreMap[up] >= bestScore * 0.5) candidates.push({ bpm: up, score: scoreMap[up] })
-  let dn = Math.max(40, Math.round(bestBpm / 2))
-  if (dn !== bestBpm && scoreMap[dn] >= bestScore * 0.5) candidates.push({ bpm: dn, score: scoreMap[dn] })
-  let t23 = Math.round(bestBpm * 2 / 3)
-  if (t23 >= 40 && t23 !== bestBpm && scoreMap[t23] >= bestScore * 0.5) candidates.push({ bpm: t23, score: scoreMap[t23] })
-  let t32 = Math.min(200, Math.round(bestBpm * 3 / 2))
-  if (t32 >= 40 && t32 !== bestBpm && t32 !== t23 && scoreMap[t32] >= bestScore * 0.5) candidates.push({ bpm: t32, score: scoreMap[t32] })
-  candidates.sort((a, b) => b.score - a.score)
-  bestBpm = candidates[0].bpm
+  window.__dbgScanBpm = bestBpm
+  window.__dbgScanScore = bestScore
+  // 同时也寻找自相关峰，用于精确比值匹配
+  let peakBpms = []
+  window.__dbgPeaks = []
+  for (let lag = 2; lag < maxLag; lag++) {
+    if (auto[lag] > auto[lag - 1] && auto[lag] > auto[lag + 1] && auto[lag] > 0) {
+      let bpm = 60 / (lag * hop / sr)
+      if (bpm >= 40 && bpm <= 200) {
+        let score = auto[lag]
+        if (lag * 2 <= maxLag) score += (auto[lag * 2] || 0) / 2
+        if (lag * 3 <= maxLag) score += (auto[lag * 3] || 0) / 3
+        if (lag * 4 <= maxLag) score += (auto[lag * 4] || 0) / 4
+        peakBpms.push({ bpm, score })
+        window.__dbgPeaks.push({ bpm: Math.round(bpm), score })
+      }
+    }
+  }
+  window.__dbgPeaks.sort((a, b) => b.score - a.score)
+  // 2/3比值替换：若 ≥100BPM 且存在 ≈2/3 的峰（比值差<0.04）、且其得分≥80%最佳分，替换为慢速峰
+  // 解决琶音/音符级周期性（如126BPM）掩盖真实拍点（如82BPM，二者成2/3比）的问题
+  if (bestBpm >= 100) {
+    let bestMatch = null
+    for (let p of peakBpms) {
+      if (p.bpm < bestBpm) {
+        let ratio = p.bpm / bestBpm
+        if (Math.abs(ratio - 2 / 3) < 0.04 && p.score >= bestScore * 0.8) {
+          if (!bestMatch || p.score > bestMatch.score) bestMatch = p
+        }
+      }
+    }
+    if (bestMatch) bestBpm = Math.round(bestMatch.bpm)
+  }
   return Math.round(Math.max(40, Math.min(200, bestBpm)))
 }
 
