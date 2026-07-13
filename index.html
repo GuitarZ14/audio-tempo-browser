@@ -231,7 +231,7 @@ function precomputeNextSegment() {
   if (remain < 1.5) return
   let tgt = previewT, ratio = tgt / obpm, sr = audioBuf.sampleRate
   let isInst = document.querySelector('#am .act').dataset.m === 'inst'
-  let segLen = Math.min(audioBuf.length - Math.round(pos * sr), Math.round(isInst ? 60 * sr : 180 * sr))
+  let segLen = Math.min(audioBuf.length - Math.round(pos * sr), Math.round(isInst ? 15 * sr : 30 * sr))
   if (segLen < 512) return
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
@@ -253,11 +253,16 @@ function playBuffer(buf, origPos) {
   segOrigStart = origPos
   let src = ctx.createBufferSource()
   src.buffer = buf
-  src.connect(ctx.destination)
+  let now = ctx.currentTime
+  let fade = 0.004
+  let gain = ctx.createGain()
+  gain.gain.setValueAtTime(0, now)
+  gain.gain.linearRampToValueAtTime(1, now + fade)
+  src.connect(gain).connect(ctx.destination)
   src.onended = playbackEnded
-  src.start(0)
+  src.start(now)
   previewSrc = src
-  pStartTime = ctx.currentTime
+  pStartTime = now
   segDuration = buf.length / buf.sampleRate
   $('upb-btn').textContent = '⏸'
   startProgTimer()
@@ -300,7 +305,7 @@ function genPreview() {
   let dur = op.duration, pos = Math.max(0, op.currentTime || 0)
   if (dur > 0 && pos >= dur) { pos = 0; op.currentTime = 0 }
   let sr = audioBuf.sampleRate, segStart = Math.round(pos * sr)
-  let segLen = Math.min(audioBuf.length - segStart, Math.round(180 * sr))
+  let segLen = Math.min(audioBuf.length - segStart, Math.round(30 * sr))
   if (segLen < 512) return
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
@@ -339,7 +344,7 @@ function genVPreview() {
   let curPos = op.duration ? op.currentTime : 0
   if (curPos >= op.duration) curPos = 0
   let segStart = Math.round(curPos * sr)
-  let segLen = Math.min(audioBuf.length - segStart, Math.round(60 * sr))
+  let segLen = Math.min(audioBuf.length - segStart, Math.round(15 * sr))
   if (segLen < 512) return
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
@@ -663,27 +668,48 @@ function detectSig(buf, bpm) {
 
 function detectKey(buf) {
   let sr = buf.sampleRate, ch = buf.numberOfChannels, n = buf.length
-  let maxN = Math.min(n, Math.round(20 * sr))
+  let maxN = Math.min(n, Math.round(25 * sr))
   let mono = new Float32Array(maxN)
   for (let c = 0; c < ch; c++) { let d = buf.getChannelData(c); for (let i = 0; i < maxN; i++) mono[i] += d[i] / ch }
-  let fftSize = 4096, hop = 2048
+  let fftSize = 2048, hop = 1024
   let nf = Math.floor((maxN - fftSize) / hop) + 1
-  if (nf < 5) return 'N/A'
+  if (nf < 10) return 'N/A'
   let win = new Float32Array(fftSize)
   for (let j = 0; j < fftSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fftSize))
   let chroma = new Float32Array(12)
   let re = new Float32Array(fftSize), im = new Float32Array(fftSize)
-  let binMin = Math.ceil(65 / (sr / fftSize)), binMax = Math.floor(2000 / (sr / fftSize))
+  let nBins = fftSize >> 1
+  let binMin = Math.ceil(80 / (sr / fftSize)), binMax = Math.min(nBins, Math.floor(4000 / (sr / fftSize)))
+  let smoothSpec = new Float32Array(nBins)
+  // 累积谱能量并计算平滑谱
+  let specSum = new Float32Array(nBins)
   for (let i = 0; i < nf; i++) {
     let off = i * hop
     for (let j = 0; j < fftSize; j++) { re[j] = mono[off + j] * win[j]; im[j] = 0 }
     fft(re, im)
-    for (let k = binMin; k <= binMax && k < fftSize / 2; k++) {
+    for (let k = 0; k < nBins; k++) {
+      specSum[k] += Math.sqrt(re[k] * re[k] + im[k] * im[k])
+    }
+  }
+  for (let k = 0; k < nBins; k++) smoothSpec[k] = specSum[k] / nf
+  // 用平滑谱做白化，再算 chroma
+  for (let i = 0; i < nf; i++) {
+    let off = i * hop
+    for (let j = 0; j < fftSize; j++) { re[j] = mono[off + j] * win[j]; im[j] = 0 }
+    fft(re, im)
+    for (let k = binMin; k <= binMax; k++) {
       let mag = Math.sqrt(re[k] * re[k] + im[k] * im[k])
+      let floor = smoothSpec[k]
+      if (floor < 1e-10) continue
+      let whitened = Math.log(1 + mag / floor)
       let freq = k * sr / fftSize
       let midi = 12 * Math.log2(freq / 440) + 69
-      let bin = ((Math.round(midi) % 12) + 12) % 12
-      chroma[bin] += mag
+      let bin = ((midi % 12) + 12) % 12
+      let frac = bin - Math.floor(bin)
+      let b0 = Math.floor(bin) % 12
+      let b1 = (b0 + 1) % 12
+      chroma[b0] += whitened * (1 - frac)
+      chroma[b1] += whitened * frac
     }
   }
   let total = 0
@@ -695,9 +721,11 @@ function detectKey(buf) {
   let mpSum = 0, mipSum = 0
   for (let i = 0; i < 12; i++) { mpSum += majorProfile[i]; mipSum += minorProfile[i] }
   for (let i = 0; i < 12; i++) { majorProfile[i] /= mpSum; minorProfile[i] /= mipSum }
-  let majorKeys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-  let minorKeys = ['Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Bm']
-  let bestKey = 'C', bestCorr = -Infinity, isMajor = true
+  let sharpKeys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+  let flatKeys  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
+  let sharpMinors = ['Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Bm']
+  let flatMinors  = ['Cm', 'Dbm', 'Dm', 'Ebm', 'Em', 'Fm', 'Gbm', 'Gm', 'Abm', 'Am', 'Bbm', 'Bm']
+  let bestKey = 'C', bestCorr = -Infinity
   for (let shift = 0; shift < 12; shift++) {
     let corrM = 0, corrM1 = 0
     for (let i = 0; i < 12; i++) {
@@ -705,8 +733,8 @@ function detectKey(buf) {
       corrM += chroma[idx] * majorProfile[i]
       corrM1 += chroma[idx] * minorProfile[i]
     }
-    if (corrM > bestCorr) { bestCorr = corrM; bestKey = majorKeys[shift]; isMajor = true }
-    if (corrM1 > bestCorr) { bestCorr = corrM1; bestKey = minorKeys[shift]; isMajor = false }
+    if (corrM > bestCorr) { bestCorr = corrM; bestKey = flatKeys[shift] }
+    if (corrM1 > bestCorr) { bestCorr = corrM1; bestKey = flatMinors[shift] }
   }
   return bestKey
 }
