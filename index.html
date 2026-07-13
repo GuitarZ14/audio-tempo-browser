@@ -156,7 +156,7 @@ async function processFile(f) {
   file = f; bn = f.name.replace(/\.[^.]+$/, '')
   hideErr(); audioBuf = null
   $('uic').style.display = 'none'; $('utx').style.display = 'none'; $('unt').style.display = 'none'
-  $('fi').style.display = 'block'; $('fin').textContent = f.name; $('utm').textContent = '0:00 / 0:00'; setProg(0)
+  $('fi').style.display = 'block'; $('fin').textContent = f.name + ' [DEPLOY_20260713]'; $('utm').textContent = '0:00 / 0:00'; setProg(0)
   try {
     let buf = await getActx().decodeAudioData(await f.arrayBuffer())
     audioBuf = buf
@@ -165,7 +165,7 @@ async function processFile(f) {
       obpm = bpm
       let sigScores = detectSigScores(buf, bpm)
       obSig = sigScores.sig || '4/4'
-      $('bpmn').textContent = '⏱ ' + Math.round(obpm) + ' BPM · ' + obSig + ' [v2 s4=' + sigScores.s4.toFixed(4) + ' s3=' + sigScores.s3.toFixed(4) + ']'
+      $('bpmn').textContent = '⏱ ' + Math.round(obpm) + ' BPM · ' + obSig
     } else { obpm = 120; $('bpmn').textContent = 'BPM 检测失败，默认 120' }
     $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').max = obpm; $('bps').value = obpm; $('bpsv').textContent = obpm; updateSliderDots()
     let op = $('op'); if (op.src) URL.revokeObjectURL(op.src)
