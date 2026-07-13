@@ -520,6 +520,16 @@ function detectBpm(buf) {
     }
     if (bestMatch) bestBpm = Math.round(bestMatch.bpm)
   }
+  // 低BPM矫正：<55BPM多半是半速/两小节周期误判，取60-180范围的最佳峰
+  if (bestBpm < 55) {
+    let bestNormal = null
+    for (let p of peakBpms) {
+      if (p.bpm >= 55 && p.bpm <= 180 && p.score > 0) {
+        if (!bestNormal || p.score > bestNormal.score) bestNormal = p
+      }
+    }
+    if (bestNormal) bestBpm = Math.round(bestNormal.bpm)
+  }
   return Math.round(Math.max(40, Math.min(200, bestBpm)))
 }
 
