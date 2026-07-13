@@ -160,14 +160,12 @@ async function processFile(f) {
   try {
     let buf = await getActx().decodeAudioData(await f.arrayBuffer())
     audioBuf = buf
-    console.log('BPM: calling detectBpm')
     let bpm = detectBpm(buf)
-    console.log('BPM: result=' + bpm + ' scan=' + window.__dbgScanBpm + ' peaks=' + (window.__dbgPeaks ? window.__dbgPeaks.length : 0))
     if (bpm) {
       obpm = bpm
       let sigScores = detectSigScores(buf, bpm)
       obSig = sigScores.sig || '4/4'
-      $('bpmn').textContent = '⏱ ' + Math.round(obpm) + ' BPM · ' + obSig + ' [v4]'
+      $('bpmn').textContent = '⏱ ' + Math.round(obpm) + ' BPM · ' + obSig
     } else { obpm = 120; $('bpmn').textContent = 'BPM 检测失败，默认 120' }
     $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').max = obpm; $('bps').value = obpm; $('bpsv').textContent = obpm; updateSliderDots()
     let op = $('op'); if (op.src) URL.revokeObjectURL(op.src)
@@ -423,7 +421,6 @@ function tp(btn) {
 }
 
 function detectBpm(buf) {
-  console.log('detectBpm ENTERED, sr=' + buf.sampleRate + ' ch=' + buf.numberOfChannels + ' n=' + buf.length)
   let sr = buf.sampleRate, ch = buf.numberOfChannels, n = buf.length
   let maxN = Math.min(n, Math.round(25 * sr))
   let mono = new Float32Array(maxN)
@@ -488,11 +485,8 @@ function detectBpm(buf) {
       bestScore = bestV; bestBpm = bpm
     }
   }
-  window.__dbgScanBpm = bestBpm
-  window.__dbgScanScore = bestScore
-  // 同时也寻找自相关峰，用于精确比值匹配
+  // 寻找自相关峰，用于精确比值匹配
   let peakBpms = []
-  window.__dbgPeaks = []
   for (let lag = 2; lag < maxLag; lag++) {
     if (auto[lag] > auto[lag - 1] && auto[lag] > auto[lag + 1] && auto[lag] > 0) {
       let bpm = 60 / (lag * hop / sr)
@@ -502,11 +496,9 @@ function detectBpm(buf) {
         if (lag * 3 <= maxLag) score += (auto[lag * 3] || 0) / 3
         if (lag * 4 <= maxLag) score += (auto[lag * 4] || 0) / 4
         peakBpms.push({ bpm, score })
-        window.__dbgPeaks.push({ bpm: Math.round(bpm), score })
       }
     }
   }
-  window.__dbgPeaks.sort((a, b) => b.score - a.score)
   // 2/3比值替换：若 ≥100BPM 且存在 ≈2/3 的峰（比值差<0.04）、且其得分≥80%最佳分，替换为慢速峰
   // 解决琶音/音符级周期性（如126BPM）掩盖真实拍点（如82BPM，二者成2/3比）的问题
   if (bestBpm >= 100) {
