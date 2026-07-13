@@ -292,7 +292,7 @@ function genVPreview() {
   let msStretched = Math.abs(ratio - 1) < 0.01 ? ms : timeStretch(ms, ratio)
   let processed = fromMidSide(msStretched, parseInt($('vra').value) / 100)
   // 处理完成后才停旧播放、启新播放
-  stopPreview(); stopVPreview()
+  stopCountIn(); stopPreview(); stopVPreview()
   let src = ctx.createBufferSource()
   src.buffer = processed; src.connect(ctx.destination)
   src.onended = playbackEnded
@@ -510,7 +510,7 @@ $('ap').addEventListener('ended', () => {
 let opDrag = false
 let seekRestart = () => {
   if ($('upb-btn').textContent !== '⏸') return
-  stopAllPreviews(); stopCountIn()
+  stopCountIn()
   if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview()
   else genPreview()
 }
@@ -558,7 +558,7 @@ function startPlayback() {
 function restartPlay() {
   if (!audioBuf) return
   $('op').currentTime = 0; segOrigStart = 0; setProg(0); $('utm').textContent = '0:00 / ' + fmt($('op').duration || 0)
-  if ($('upb-btn').textContent === '⏸') { stopAllPreviews(); if (countInOn) { playCountIn() } else { startPlayback() } }
+  if ($('upb-btn').textContent === '⏸') { if (countInOn) { playCountIn() } else { startPlayback() } }
 }
 function toggleCountIn() {
   countInOn = !countInOn
