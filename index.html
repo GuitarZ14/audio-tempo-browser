@@ -621,7 +621,7 @@ function detectSigScores(buf, bpm) {
   for (let i = 1; i < nf; i++) onset[i] /= mA
   let bf = Math.round(60 / bpm / (hop / sr))
   if (bf < 2) return def
-  let best4 = 0, best3 = 0, best6 = 0, beats3 = null
+  let best4 = 0, best3 = 0, best6 = 0, beats3 = null, best3phaseS4 = null
   for (let ph = 0; ph < bf; ph++) {
     let s4 = [0, 0, 0, 0], c4 = 0
     for (let m = ph; m + 4 * bf <= nf; m += 4 * bf) {
@@ -638,14 +638,22 @@ function detectSigScores(buf, bpm) {
     }
     if (c3 > 0) for (let b = 0; b < 3; b++) s3[b] /= c3
     let sc3 = s3[0] - (s3[1] + s3[2]) / 2
-    if (sc3 > best3) { best3 = sc3; beats3 = s3.slice() }
+    if (sc3 > best3) { best3 = sc3; beats3 = s3.slice(); best3phaseS4 = s4.slice() }
     let sc6 = sc3 + Math.abs(s3[1] - s3[2])
     if (sc6 > best6) best6 = sc6
   }
   if (!beats3) beats3 = [0, 0, 1]
   let waltzOk = beats3[0] > beats3[1] && beats3[0] >= beats3[2]
   let sig = '4/4'
-  if (best3 > best4 && waltzOk) sig = '3/4'
+  if (best3 > best4 && waltzOk) {
+    // 在同相位检查 4/4 得分：若 4/4 在该相位也高，说明是 4/4 被错分
+    if (best3phaseS4) {
+      let sc4AtBest3 = best3phaseS4[0] - (best3phaseS4[1] + best3phaseS4[2] + best3phaseS4[3]) / 3 + (best3phaseS4[0] + best3phaseS4[2]) / 2 - (best3phaseS4[1] + best3phaseS4[3]) / 2
+      if (best3 > best4 * 1.005 && best3 > sc4AtBest3 * 1.005) sig = '3/4'
+    } else {
+      sig = '3/4'
+    }
+  }
   return { sig, s4: best4, s6: best6, s3: best3, waltz: waltzOk }
 }
 
