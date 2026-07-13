@@ -165,6 +165,7 @@ async function processFile(f) {
       obpm = bpm
       let sigScores = detectSigScores(buf, bpm)
       obSig = sigScores.sig || '4/4'
+      console.log('DEBUG sigScores:', sigScores)
       $('bpmn').textContent = '⏱ ' + Math.round(obpm) + ' BPM · ' + obSig
       $('fin').textContent = f.name + ' [s4=' + sigScores.s4.toFixed(4) + ' s3=' + sigScores.s3.toFixed(4) + ' waltz=' + sigScores.waltz + ']'
     } else { obpm = 120; $('bpmn').textContent = 'BPM 检测失败，默认 120' }
