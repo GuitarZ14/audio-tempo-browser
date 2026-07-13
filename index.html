@@ -185,7 +185,7 @@ $('pct').oninput = () => {
 }
 $('pct').onchange = () => { if (!audioBuf || $('upb-btn').textContent !== '⏸') return; if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() }
 function stopPreview() {
-  if (previewSrc) { try { previewSrc.stop() } catch(e) {} previewSrc = null }
+  if (previewSrc) { try { previewSrc.onended = null; previewSrc.stop() } catch(e) {} previewSrc = null }
 }
 function stopVPreview() {
   vocalAudioPlayback = false
