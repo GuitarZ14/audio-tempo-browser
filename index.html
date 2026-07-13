@@ -609,7 +609,7 @@ function detectSigScores(buf, bpm) {
   let compoundOk = beats3[2] >= beats3[0] - 0.01
   let sig = '4/4'
   if (best6 > best4 + 0.02 && best6 > best3 + 0.02 && compoundOk) sig = '6/8'
-  else if (best3 > best4 + 0.01 && waltzOk) sig = '3/4'
+  else if (best3 > Math.max(best4 * 1.04, best4 + 0.003) && waltzOk) sig = '3/4'
   return { sig, s4: best4, s6: best6, s3: best3 }
 }
 
