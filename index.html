@@ -239,7 +239,7 @@ function getTargetBPM() {
 }
 function genPreview() {
   if (!audioBuf) return
-  stopCountIn(); stopVPreview()
+  stopCountIn(); stopVPreview(); stopPreview()
   let op = $('op')
   try { if (!op.paused) op.pause() } catch(e) {}
   let t = getTargetBPM()
