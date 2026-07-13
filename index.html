@@ -422,6 +422,7 @@ function detectBpm(buf) {
     if (T * 4 <= maxLag) score += (auto[T * 4] || 0) / 4
     if (score > bestScore) { bestScore = score; bestBpm = bpm }
   }
+  let origBestBpm = bestBpm, origBestScore = bestScore
   // 倍速检测（50%阈值防半速陷阱）
   let bpm2 = Math.min(200, bestBpm * 2)
   if (bpm2 !== bestBpm) {
@@ -431,7 +432,7 @@ function detectBpm(buf) {
       if (T2 * 2 <= maxLag) score2 += (auto[T2 * 2] || 0) / 2
       if (T2 * 3 <= maxLag) score2 += (auto[T2 * 3] || 0) / 3
       if (T2 * 4 <= maxLag) score2 += (auto[T2 * 4] || 0) / 4
-      if (score2 >= bestScore * 0.5) bestBpm = bpm2
+      if (score2 >= bestScore * 0.5) { bestBpm = bpm2; bestScore = score2 }
     }
   }
   // 三倍速检测（防40→120等）
@@ -443,7 +444,21 @@ function detectBpm(buf) {
       if (T3 * 2 <= maxLag) score3 += (auto[T3 * 2] || 0) / 2
       if (T3 * 3 <= maxLag) score3 += (auto[T3 * 3] || 0) / 3
       if (T3 * 4 <= maxLag) score3 += (auto[T3 * 4] || 0) / 4
-      if (score3 >= bestScore * 0.35) bestBpm = bpm3
+      if (score3 >= bestScore * 0.35) { bestBpm = bpm3; bestScore = score3 }
+    }
+  }
+  // 半速检测（仅当被倍速检测推高后才执行，防8分/16分把结果推太高）
+  if (bestBpm > origBestBpm) {
+    let halfBpm = Math.max(40, Math.round(origBestBpm / 2))
+    if (halfBpm !== origBestBpm) {
+      let Th = Math.round(60 / halfBpm / (hop / sr))
+      if (Th >= 2 && Th <= maxLag) {
+        let scoreHalf = (auto[Th] || 0)
+        if (Th * 2 <= maxLag) scoreHalf += (auto[Th * 2] || 0) / 2
+        if (Th * 3 <= maxLag) scoreHalf += (auto[Th * 3] || 0) / 3
+        if (Th * 4 <= maxLag) scoreHalf += (auto[Th * 4] || 0) / 4
+        if (scoreHalf >= origBestScore * 0.8) bestBpm = halfBpm
+      }
     }
   }
   return Math.round(Math.max(40, Math.min(200, bestBpm)))
