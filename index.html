@@ -82,7 +82,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="fi" id="fi" style="display:none">
  <div class="ap-pb" id="upb" style="margin-top:0"><div class="ap-pb-in" id="upi"></div><div id="upthumb"></div></div>
  <div style="display:flex;align-items:center;gap:10px;margin-top:18px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:8px 14px;border-radius:16px;font-size:18px;line-height:1">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:8px 22px;border-radius:16px;font-size:18px;line-height:1">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px;color:#a0aec0">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:6px 12px;border-radius:14px;font-size:13px">更换音频文件</button></div>
-  <div style="font-size:11px;color:#718096;margin-top:2px"><span id="bpmn"></span></div>
+  <div style="font-size:11px;color:#718096;margin-top:2px"><span id="bpmn"></span> <span id="keyn" style="margin-left:8px;color:#4ecdc4"></span></div>
   <div style="margin-top:6px;text-align:left"><button id="ci-btn" onclick="event.stopPropagation();toggleCountIn()" title="开启预备拍"><span class="ci-ic">⏲</span>开启预备拍</button></div>
 </div>
 </div>
@@ -165,9 +165,11 @@ async function processFile(f) {
       obpm = bpm
       let sigScores = detectSigScores(buf, bpm)
       obSig = sigScores.sig || '4/4'
+      let key = detectKey(buf)
       $('bpmn').textContent = '⏱ ' + Math.round(obpm) + ' BPM · ' + obSig
+      $('keyn').textContent = key
       $('fin').textContent = f.name
-    } else { obpm = 120; $('bpmn').textContent = 'BPM 检测失败，默认 120' }
+    } else { obpm = 120; $('bpmn').textContent = 'BPM 检测失败，默认 120'; $('keyn').textContent = '' }
     $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').max = obpm; $('bps').value = obpm; $('bpsv').textContent = obpm; updateSliderDots()
     let op = $('op'); if (op.src) URL.revokeObjectURL(op.src)
     origAudioUrl = URL.createObjectURL(f)
@@ -649,6 +651,56 @@ function detectSigScores(buf, bpm) {
 
 function detectSig(buf, bpm) {
   return detectSigScores(buf, bpm).sig || '4/4'
+}
+
+function detectKey(buf) {
+  let sr = buf.sampleRate, ch = buf.numberOfChannels, n = buf.length
+  let maxN = Math.min(n, Math.round(20 * sr))
+  let mono = new Float32Array(maxN)
+  for (let c = 0; c < ch; c++) { let d = buf.getChannelData(c); for (let i = 0; i < maxN; i++) mono[i] += d[i] / ch }
+  let fftSize = 4096, hop = 2048
+  let nf = Math.floor((maxN - fftSize) / hop) + 1
+  if (nf < 5) return 'N/A'
+  let win = new Float32Array(fftSize)
+  for (let j = 0; j < fftSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fftSize))
+  let chroma = new Float32Array(12)
+  let re = new Float32Array(fftSize), im = new Float32Array(fftSize)
+  let binMin = Math.ceil(65 / (sr / fftSize)), binMax = Math.floor(2000 / (sr / fftSize))
+  for (let i = 0; i < nf; i++) {
+    let off = i * hop
+    for (let j = 0; j < fftSize; j++) { re[j] = mono[off + j] * win[j]; im[j] = 0 }
+    fft(re, im)
+    for (let k = binMin; k <= binMax && k < fftSize / 2; k++) {
+      let mag = Math.sqrt(re[k] * re[k] + im[k] * im[k])
+      let freq = k * sr / fftSize
+      let midi = 12 * Math.log2(freq / 440) + 69
+      let bin = ((Math.round(midi) % 12) + 12) % 12
+      chroma[bin] += mag
+    }
+  }
+  let total = 0
+  for (let i = 0; i < 12; i++) total += chroma[i]
+  if (total < 1e-10) return 'N/A'
+  for (let i = 0; i < 12; i++) chroma[i] /= total
+  let majorProfile = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+  let minorProfile = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+  let mpSum = 0, mipSum = 0
+  for (let i = 0; i < 12; i++) { mpSum += majorProfile[i]; mipSum += minorProfile[i] }
+  for (let i = 0; i < 12; i++) { majorProfile[i] /= mpSum; minorProfile[i] /= mipSum }
+  let majorKeys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+  let minorKeys = ['Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Bm']
+  let bestKey = 'C', bestCorr = -Infinity, isMajor = true
+  for (let shift = 0; shift < 12; shift++) {
+    let corrM = 0, corrM1 = 0
+    for (let i = 0; i < 12; i++) {
+      let idx = (i + shift) % 12
+      corrM += chroma[idx] * majorProfile[i]
+      corrM1 += chroma[idx] * minorProfile[i]
+    }
+    if (corrM > bestCorr) { bestCorr = corrM; bestKey = majorKeys[shift]; isMajor = true }
+    if (corrM1 > bestCorr) { bestCorr = corrM1; bestKey = minorKeys[shift]; isMajor = false }
+  }
+  return bestKey
 }
 
 function fmt(s) { let m = Math.floor(s / 60), se = Math.floor(s % 60); return m + ':' + (se < 10 ? '0' : '') + se }
