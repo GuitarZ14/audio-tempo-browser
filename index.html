@@ -165,9 +165,8 @@ async function processFile(f) {
       obpm = bpm
       let sigScores = detectSigScores(buf, bpm)
       obSig = sigScores.sig || '4/4'
-      console.log('DEBUG sigScores:', sigScores)
       $('bpmn').textContent = '⏱ ' + Math.round(obpm) + ' BPM · ' + obSig
-      $('fin').textContent = f.name + ' [s4=' + sigScores.s4.toFixed(4) + ' s3=' + sigScores.s3.toFixed(4) + ' waltz=' + sigScores.waltz + ']'
+      $('fin').textContent = f.name
     } else { obpm = 120; $('bpmn').textContent = 'BPM 检测失败，默认 120' }
     $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').max = obpm; $('bps').value = obpm; $('bpsv').textContent = obpm; updateSliderDots()
     let op = $('op'); if (op.src) URL.revokeObjectURL(op.src)
@@ -597,7 +596,7 @@ function detectSigScores(buf, bpm) {
   if (!beats3) beats3 = [0, 0, 1]
   let waltzOk = beats3[0] > beats3[1] && beats3[0] >= beats3[2]
   let sig = '4/4'
-  if (best3 > Math.max(best4 * 1.04, best4 + 0.003) && waltzOk) sig = '3/4'
+  if (best3 > best4 && waltzOk) sig = '3/4'
   return { sig, s4: best4, s6: best6, s3: best3, waltz: waltzOk }
 }
 
