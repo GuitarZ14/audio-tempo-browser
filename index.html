@@ -236,7 +236,7 @@ function genPreview() {
   let dur = op.duration, pos = Math.max(0, op.currentTime || 0)
   if (dur > 0 && pos >= dur) { pos = 0; op.currentTime = 0 }
   let sr = audioBuf.sampleRate, segStart = Math.round(pos * sr)
-  let segLen = Math.min(audioBuf.length - segStart, Math.round(120 * sr))
+  let segLen = audioBuf.length - segStart
   if (segLen < 512) return
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
@@ -279,7 +279,7 @@ function genVPreview() {
   let curPos = op.duration ? op.currentTime : 0
   if (curPos >= op.duration) curPos = 0
   let segStart = Math.round(curPos * sr)
-  let segLen = Math.min(audioBuf.length - segStart, Math.round(120 * sr))
+  let segLen = audioBuf.length - segStart
   if (segLen < 512) return
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
