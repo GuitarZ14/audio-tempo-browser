@@ -242,7 +242,7 @@ function startProgTimer() {
   if (progTimer) return
   progTimer = setInterval(() => {
     if (opDrag) return
-    let op = $('op'), dur = op.duration && isFinite(op.duration) && op.duration > 0 ? op.duration : (audioBuf ? audioBuf.duration / audioBuf.sampleRate : 0), cur = 0
+    let op = $('op'), dur = op.duration && isFinite(op.duration) && op.duration > 0 ? op.duration : (audioBuf ? audioBuf.duration : 0), cur = 0
     if (previewSrc) cur = Math.max(0, (actx ? actx.currentTime : 0) - pStartTime)
     else cur = op.currentTime
     if (dur) {
@@ -268,7 +268,7 @@ function precomputeNextSegment() {
   // 从 Web Audio 时钟推算原始位置，不能用 $('op').currentTime（它是暂停的）
   let now = actx ? actx.currentTime : 0
   let pos = segOrigStart + (now - pStartTime) * (previewT / obpm)
-  let origDur = audioBuf.duration / audioBuf.sampleRate
+  let origDur = audioBuf.duration
   let remain = origDur - pos
   if (remain < 1.5) return Promise.resolve()
   let tgt = previewT, ratio = tgt / obpm, sr = audioBuf.sampleRate
@@ -322,7 +322,7 @@ function playbackEnded() {
     let tgt = getTargetBPM()
     if (tgt && Math.abs(tgt / obpm - 1) >= 0.01) {
       // 从 Web Audio 时钟推算原始位置
-      let origDur = audioBuf.duration / audioBuf.sampleRate
+      let origDur = audioBuf.duration
       let curOrigPos = segOrigStart + (actx.currentTime - pStartTime) * (previewT / obpm)
       let remain = origDur - curOrigPos
       if (remain > 1) {
@@ -813,7 +813,7 @@ document.addEventListener('touchmove', e => { if (opDrag) { e.preventDefault(); 
 document.addEventListener('touchend', () => { if (opDrag) { seekRestart() }; $('upb').classList.remove('dragging'); opDrag = false })
 function upbSeek(e) {
   let op = $('op'), dur = op.duration
-  if (!dur || !isFinite(dur) || dur <= 0) { dur = audioBuf ? audioBuf.duration / audioBuf.sampleRate : 0 }
+  if (!dur || !isFinite(dur) || dur <= 0) { dur = audioBuf ? audioBuf.duration : 0 }
   if (!dur || dur <= 0) return
   let rect = $('upb').getBoundingClientRect(), x = ('touches' in e ? e.touches[0] : e).clientX
   op.currentTime = Math.max(0, Math.min(dur, ((x - rect.left) / rect.width) * dur))
