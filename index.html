@@ -423,7 +423,42 @@ $('go').onclick = async () => {
     let ratio = tgt / obpm
     if (ratio < 0.25) ratio = 0.25
     if (ratio > 4) ratio = 4
-    let result = timeStretch(buf, ratio); pb(60)
+    // 分段 timeStretch：避免整文件相位累积误差 + 让进度条可更新
+    let sr = buf.sampleRate, ch = buf.numberOfChannels, srcLen = buf.length
+    let chunkSrcSamples = Math.round(15 * sr)  // 每段取15s源音频
+    let totalChunks = Math.ceil(srcLen / chunkSrcSamples)
+    let totalOutLen = Math.round(srcLen / ratio)
+    let result = actx.createBuffer(ch, totalOutLen, sr)
+    let xfadeSamples = Math.round(0.05 * sr)  // 50ms 交叉淡化
+    for (let i = 0; i < totalChunks; i++) {
+      let start = i * chunkSrcSamples
+      let len = Math.min(chunkSrcSamples, srcLen - start)
+      let chunk = actx.createBuffer(ch, len, sr)
+      for (let c = 0; c < ch; c++) {
+        let src = buf.getChannelData(c), dst = chunk.getChannelData(c)
+        for (let j = 0; j < len; j++) dst[j] = src[start + j]
+      }
+      let stretched = timeStretch(chunk, ratio)
+      let outStart = Math.round(start / ratio)
+      let outLen = stretched.length
+      for (let c = 0; c < ch; c++) {
+        let src = stretched.getChannelData(c), dst = result.getChannelData(c)
+        for (let j = 0; j < outLen && outStart + j < totalOutLen; j++) {
+          let pos = outStart + j
+          if (i > 0 && j < xfadeSamples) {
+            // 段头交叉淡化：新段淡入，与前段尾部混合
+            let fade = j / xfadeSamples
+            let prev = dst[pos]
+            dst[pos] = prev * (1 - fade) + src[j] * fade
+          } else {
+            dst[pos] = src[j]
+          }
+        }
+      }
+      pb(Math.round(30 + 30 * (i + 1) / totalChunks))
+      if (i < totalChunks - 1) await new Promise(r => setTimeout(r, 0))  // 让出主线程
+    }
+    pb(60)
 
     if (countInOn) {
       let beats = getCountInBeats(), interval = 60 / tgt, clickLen = Math.round(buf.sampleRate * 0.06)
