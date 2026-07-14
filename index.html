@@ -61,10 +61,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .sc button:first-child{border-radius:10px 0 0 10px}
 .sc button:last-child{border-radius:0 10px 10px 0}
 .sc button.act{background:#4ecdc4;color:#fff;border-color:#4ecdc4}
-#ci-btn{display:inline-flex;align-items:center;gap:6px;background:transparent;border:1.5px solid #cbd5e0;border-radius:20px;cursor:pointer;font-size:13px;color:#a0aec0;padding:5px 14px;transition:all .2s;user-select:none}
-#ci-btn:hover{border-color:#4ecdc4;color:#4ecdc4}
-#ci-btn.on{background:rgba(78,205,196,.12);border-color:#4ecdc4;color:#4ecdc4}
-#ci-btn .ci-ic{font-size:16px}
 </style>
 </head>
 <body>
@@ -77,13 +73,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="card">
 <div class="ul" id="ul">
 <div class="ic" id="uic">📁</div>
-<div class="tx" id="utx">点击更换音频文件</div>
+<div class="tx" id="utx">点击选择音频文件</div>
 <div class="nt" id="unt">支持 MP3 / WAV / M4A</div>
 <div class="fi" id="fi" style="display:none">
  <div class="ap-pb" id="upb" style="margin-top:0"><div class="ap-pb-in" id="upi"></div><div id="upthumb"></div></div>
- <div style="display:flex;align-items:center;gap:10px;margin-top:18px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:8px 14px;border-radius:16px;font-size:18px;line-height:1">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:8px 22px;border-radius:16px;font-size:18px;line-height:1">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px;color:#a0aec0">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:6px 12px;border-radius:14px;font-size:13px">更换音频文件</button></div>
+ <div style="display:flex;align-items:center;gap:10px;margin-top:18px"><button class="pb2" onclick="event.stopPropagation();restartPlay()" style="flex:none;padding:8px 14px;border-radius:16px;font-size:18px;line-height:1">⏮</button><button id="upb-btn" class="pb2" onclick="event.stopPropagation();unifiedPlay()" style="flex:none;padding:8px 22px;border-radius:16px;font-size:18px;line-height:1">▶</button><span id="fin" style="font-size:13px;color:#4ecdc4;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span class="ap-tm" id="utm" style="margin:0;font-size:11px;color:#a0aec0">0:00 / 0:00</span><button id="cf" class="pb2" onclick="event.stopPropagation();gi.click()" style="flex:none;padding:6px 12px;border-radius:14px;font-size:13px">选择音频文件</button></div>
   <div style="font-size:11px;color:#718096;margin-top:2px"><span id="bpmn"></span></div>
-  <div style="margin-top:6px;text-align:left"><button id="ci-btn" onclick="event.stopPropagation();toggleCountIn()" title="开启预备拍"><span class="ci-ic">⏲</span>开启预备拍</button></div>
 </div>
 </div>
 <input type="file" id="gi" accept=".mp3,.wav,.m4a,.aac,.ogg" hidden>
@@ -130,7 +125,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </div>
 <audio id="ap" style="display:none"></audio>
 <script>
-let actx, file, obpm = 120, bn = '', audioBuf = null, obSig = '4/4', countInOn = false, origAudioUrl = null
+let actx, file, obpm = 120, bn = '', audioBuf = null, obSig = '4/4', origAudioUrl = null
 let segDuration = 0, nextSegBuffer = null, nextSegOrigStart = 0, _tsCancel = 0, _precomputing = false
 let $ = id => document.getElementById(id)
 
@@ -195,7 +190,7 @@ function stopPreview() {
 function stopVPreview() {
   vocalAudioPlayback = false
 }
-function stopAllPreviews() { stopPreview(); stopVPreview(); stopCountIn() }
+function stopAllPreviews() { stopPreview(); stopVPreview() }
 function startLookahead() {
   if (lookaheadTimer) return
   lookaheadTimer = setInterval(() => {
@@ -270,8 +265,11 @@ function startProgTimer() {
 function invalidateNextSeg() { nextSegBuffer = null }
 function precomputeNextSegment() {
   if (!audioBuf || !previewT || Math.abs(previewT / obpm - 1) < 0.01) return Promise.resolve()
-  let op = $('op'), pos = op.currentTime || 0
-  let remain = (op.duration || audioBuf.duration / audioBuf.sampleRate) - pos
+  // 从 Web Audio 时钟推算原始位置，不能用 $('op').currentTime（它是暂停的）
+  let now = actx ? actx.currentTime : 0
+  let pos = segOrigStart + (now - pStartTime) * (previewT / obpm)
+  let origDur = audioBuf.duration / audioBuf.sampleRate
+  let remain = origDur - pos
   if (remain < 1.5) return Promise.resolve()
   let tgt = previewT, ratio = tgt / obpm, sr = audioBuf.sampleRate
   let isInst = document.querySelector('#am .act').dataset.m === 'inst'
@@ -321,9 +319,12 @@ function playBuffer(buf, origPos) {
 function playbackEnded() {
   // 段播放完毕，检查是否还有剩余音频需要接续
   if (audioBuf && previewT) {
-    let op = $('op'), tgt = getTargetBPM()
+    let tgt = getTargetBPM()
     if (tgt && Math.abs(tgt / obpm - 1) >= 0.01) {
-      let remain = (op.duration || audioBuf.duration / audioBuf.sampleRate) - (op.currentTime || 0)
+      // 从 Web Audio 时钟推算原始位置
+      let origDur = audioBuf.duration / audioBuf.sampleRate
+      let curOrigPos = segOrigStart + (actx.currentTime - pStartTime) * (previewT / obpm)
+      let remain = origDur - curOrigPos
       if (remain > 1) {
         // 有预计算好的缓冲就直接用，避免段间停顿产生咔声
         if (nextSegBuffer) {
@@ -345,7 +346,7 @@ function getTargetBPM() {
 }
 async function genPreview() {
   if (!audioBuf) return
-  stopCountIn(); stopVPreview(); stopPreview(); invalidateNextSeg()
+  stopVPreview(); stopPreview(); invalidateNextSeg()
   let op = $('op')
   try { if (!op.paused) op.pause() } catch(e) {}
   let t = getTargetBPM()
@@ -407,7 +408,7 @@ async function genVPreview() {
   let msStretched = Math.abs(ratio - 1) < 0.01 ? ms : await timeStretch(ms, ratio, true)
   let processed = fromMidSide(msStretched, parseInt($('vra').value) / 100)
   // 处理完成后才停旧播放、启新播放
-  stopCountIn(); stopPreview(); stopVPreview()
+  stopPreview(); stopVPreview()
   playBuffer(processed, curPos)
 }
 
@@ -467,27 +468,6 @@ $('go').onclick = async () => {
       if (i < totalChunks - 1) await new Promise(r => setTimeout(r, 0))  // 让出主线程
     }
     pb(60)
-
-    if (countInOn) {
-      let beats = getCountInBeats(), interval = 60 / tgt, clickLen = Math.round(buf.sampleRate * 0.06)
-      let totalClicks = Math.round(beats * interval * buf.sampleRate)
-      let newLen = result.length + totalClicks
-      let combined = actx.createBuffer(result.numberOfChannels, newLen, result.sampleRate)
-      for (let c = 0; c < result.numberOfChannels; c++) {
-        let out = combined.getChannelData(c), src = result.getChannelData(c)
-        for (let i = 0; i < beats; i++) {
-          let pos = Math.round(i * interval * buf.sampleRate)
-          let freq = i === 0 ? 1200 : 880
-          for (let j = 0; j < clickLen && pos + j < totalClicks; j++) {
-            let t = j / buf.sampleRate
-            let env = Math.exp(-t * 80) * 0.5
-            out[pos + j] += Math.sin(2 * Math.PI * freq * t) * env
-          }
-        }
-        for (let j = 0; j < src.length; j++) out[totalClicks + j] = src[j]
-      }
-      result = combined; pb(80)
-    }
 
     stx('生成文件...'); pb(85)
     let wav = toWav(result)
@@ -813,7 +793,6 @@ $('ap').addEventListener('ended', () => {
 let opDrag = false
 let seekRestart = () => {
   if ($('upb-btn').textContent !== '⏸') return
-  stopCountIn()
   if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview()
   else genPreview()
 }
@@ -847,11 +826,10 @@ function unifiedPlay() {
   if (!audioBuf) return
   let b = $('upb-btn'), op = $('op')
   if (b.textContent === '⏸') {
-    stopAllPreviews(); stopCountIn(); try { if (!op.paused) op.pause() } catch(e) {}
+    stopAllPreviews(); try { if (!op.paused) op.pause() } catch(e) {}
     stopProgTimer(); b.textContent = '▶'; return
   }
-  stopAllPreviews(); stopCountIn(); try { if (!op.paused) op.pause() } catch(e) {}; stopProgTimer()
-  if (countInOn && $('op').currentTime < 0.5) { playCountIn(); return }
+  stopAllPreviews(); try { if (!op.paused) op.pause() } catch(e) {}; stopProgTimer()
   startPlayback()
 }
 function startPlayback() {
@@ -861,61 +839,9 @@ function startPlayback() {
 function restartPlay() {
   if (!audioBuf) return
   let op = $('op'); try { if (!op.paused) op.pause() } catch(e) {}
-  stopPreview(); stopCountIn()
+  stopPreview()
   op.currentTime = 0; segOrigStart = 0; setProg(0); $('utm').textContent = '0:00 / ' + fmt(op.duration || 0)
-  if ($('upb-btn').textContent === '⏸') { if (countInOn) { playCountIn() } else { startPlayback() } }
-}
-function toggleCountIn() {
-  countInOn = !countInOn
-  $('ci-btn').classList.toggle('on')
-  if (countInOn && $('upb-btn').textContent === '⏸') { restartPlay() }
-}
-function getCountInBeats() {
-  let n = parseInt(obSig.split('/')[0]); return isNaN(n) || n < 1 ? 4 : Math.min(n, 12)
-}
-let countInTimer = null, countInOscs = []
-function stopCountIn() {
-  if (countInTimer) { clearTimeout(countInTimer); countInTimer = null }
-  for (let o of countInOscs) { try { o.stop() } catch(e) {} }
-  countInOscs = []
-}
-let precomputedFirstSeg = null
-async function playCountIn() {
-  let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
-  stopPreview(); stopVPreview(); stopCountIn(); $('upb-btn').textContent = '⏸'; stopProgTimer()
-  let op = $('op'); try { if (!op.paused) op.pause() } catch(e) {}
-  let m = document.querySelector('#am .act').dataset.m
-  let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
-  if (!t || t < 20) t = obpm
-  let beats = getCountInBeats(), interval = 60 / t, startAt = ctx.currentTime + 0.05
-  for (let i = 0; i < beats; i++) {
-    let t2 = startAt + i * interval
-    let osc = ctx.createOscillator(), gain = ctx.createGain()
-    osc.frequency.value = i === 0 ? 1200 : 880
-    gain.gain.setValueAtTime(0.6, t2); gain.gain.exponentialRampToValueAtTime(0.001, t2 + 0.06)
-    osc.connect(gain).connect(ctx.destination); osc.start(t2); osc.stop(t2 + 0.06)
-    countInOscs.push(osc)
-  }
-  // 预备拍期间提前计算第一段，避免 timeStretch 阻塞导致停顿
-  precomputedFirstSeg = null
-  previewT = t; let ratio = t / obpm; segOrigStart = 0
-  if (Math.abs(ratio - 1) >= 0.01 && m !== 'inst') {
-    let sr = audioBuf.sampleRate, segLen = Math.min(audioBuf.length, Math.round(30 * sr))
-    if (segLen >= 512) {
-      let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
-      for (let c = 0; c < audioBuf.numberOfChannels; c++) {
-        let s = audioBuf.getChannelData(c), d = seg.getChannelData(c)
-        for (let j = 0; j < segLen; j++) d[j] = s[j]
-      }
-      precomputedFirstSeg = await timeStretch(seg, ratio)
-    }
-  }
-  setProg(0); $('utm').textContent = '预备 ' + beats + ' 拍'
-  countInTimer = setTimeout(() => {
-    countInTimer = null
-    if (precomputedFirstSeg) { playBuffer(precomputedFirstSeg, 0); precomputedFirstSeg = null }
-    else startPlayback()
-  }, 50 + beats * interval * 1000)
+  if ($('upb-btn').textContent === '⏸') startPlayback()
 }
 $('op').addEventListener('ended', playbackEnded)
 
