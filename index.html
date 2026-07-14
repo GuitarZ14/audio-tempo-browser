@@ -214,7 +214,10 @@ let _tsWorker = null
   `
   let blob = new Blob([code], { type: 'application/javascript' })
   let url = URL.createObjectURL(blob)
-  try { _tsWorker = new Worker(url) } catch(e) { console.warn('Web Worker not available, falling back to main-thread timeStretch') }
+  try {
+    _tsWorker = new Worker(url)
+    _tsWorker.onerror = () => { _tsWorker = null; console.warn('Web Worker crashed, falling back to main-thread timeStretch') }
+  } catch(e) { console.warn('Web Worker not available, falling back to main-thread timeStretch') }
   URL.revokeObjectURL(url)
 })()
 
@@ -1015,19 +1018,32 @@ function timeStretch(buf, sFactor) {
     let channels = []
     for (let c = 0; c < ch; c++) channels.push(new Float32Array(buf.getChannelData(c)))
     let id = ++_tsCancel
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
+      let resolved = false
       let handler = (e) => {
         if (e.data.id !== id) return
+        resolved = true
         _tsWorker.removeEventListener('message', handler)
+        _tsWorker.removeEventListener('error', errHandler)
         let d = e.data, out = actx.createBuffer(ch, d.newLen, sr)
         for (let c = 0; c < ch; c++) out.getChannelData(c).set(d.channels[c])
         resolve(out)
       }
+      let errHandler = () => {
+        if (resolved) return
+        resolved = true
+        _tsWorker.removeEventListener('message', handler)
+        _tsWorker.removeEventListener('error', errHandler)
+        _tsWorker = null  // disable worker permanently after crash
+        // Fall back to main-thread for this call
+        timeStretchMain(buf, sFactor).then(resolve, reject)
+      }
       _tsWorker.addEventListener('message', handler)
+      _tsWorker.addEventListener('error', errHandler)
       _tsWorker.postMessage({ type: 'stretch', channels, sampleRate: sr, sFactor, id })
     })
   }
-  // Fallback: main-thread async (yields every 8 frames instead of 4 to reduce overhead)
+  // Fallback: main-thread async (yields every 8 frames)
   return timeStretchMain(buf, sFactor)
 }
 
