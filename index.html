@@ -131,7 +131,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <audio id="ap" style="display:none"></audio>
 <script>
 let actx, file, obpm = 120, bn = '', audioBuf = null, obSig = '4/4', countInOn = false, origAudioUrl = null
-let segDuration = 0, nextSegBuffer = null, nextSegOrigStart = 0
+let segDuration = 0, nextSegBuffer = null, nextSegOrigStart = 0, _tsCancel = 0, _precomputing = false
 let $ = id => document.getElementById(id)
 
 function getActx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx }
@@ -205,7 +205,10 @@ function startLookahead() {
     // 段尾预计算：根据变速比动态调整窗口，低速时 timeStretch 耗时更长
     let rem = segEndTime - now
     let precomputeWindow = Math.max(8, 10 * Math.abs(1 - previewT / obpm))
-    if (rem > 0 && rem < precomputeWindow && !nextSegBuffer) precomputeNextSegment()
+    if (rem > 0 && rem < precomputeWindow && !nextSegBuffer && !_precomputing) {
+      _precomputing = true
+      precomputeNextSegment().then(() => { _precomputing = false })
+    }
     // 段尾交叉淡化
     if (rem > 0 && rem < xfadeDur + 0.02 && nextSegBuffer) {
       let buf = nextSegBuffer; nextSegBuffer = null
@@ -266,14 +269,14 @@ function startProgTimer() {
 }
 function invalidateNextSeg() { nextSegBuffer = null }
 function precomputeNextSegment() {
-  if (!audioBuf || !previewT || Math.abs(previewT / obpm - 1) < 0.01) return
+  if (!audioBuf || !previewT || Math.abs(previewT / obpm - 1) < 0.01) return Promise.resolve()
   let op = $('op'), pos = op.currentTime || 0
   let remain = (op.duration || audioBuf.duration / audioBuf.sampleRate) - pos
-  if (remain < 1.5) return
+  if (remain < 1.5) return Promise.resolve()
   let tgt = previewT, ratio = tgt / obpm, sr = audioBuf.sampleRate
   let isInst = document.querySelector('#am .act').dataset.m === 'inst'
   let segLen = Math.min(audioBuf.length - Math.round(pos * sr), Math.round(isInst ? 15 * sr : 30 * sr))
-  if (segLen < 512) return
+  if (segLen < 512) return Promise.resolve()
   let seg = actx.createBuffer(audioBuf.numberOfChannels, segLen, sr)
   for (let c = 0; c < audioBuf.numberOfChannels; c++) {
     let s = audioBuf.getChannelData(c), d = seg.getChannelData(c)
@@ -281,12 +284,16 @@ function precomputeNextSegment() {
   }
   if (isInst) {
     let ms = midSide(seg)
-    let msStretched = Math.abs(ratio - 1) < 0.01 ? ms : timeStretch(ms, ratio)
-    nextSegBuffer = fromMidSide(msStretched, parseInt($('vra').value) / 100)
+    return (Math.abs(ratio - 1) < 0.01 ? Promise.resolve(ms) : timeStretch(ms, ratio)).then(msStretched => {
+      nextSegBuffer = fromMidSide(msStretched, parseInt($('vra').value) / 100)
+      nextSegOrigStart = pos
+    })
   } else {
-    nextSegBuffer = Math.abs(ratio - 1) < 0.01 ? seg : timeStretch(seg, ratio)
+    return (Math.abs(ratio - 1) < 0.01 ? Promise.resolve(seg) : timeStretch(seg, ratio)).then(stretched => {
+      nextSegBuffer = stretched
+      nextSegOrigStart = pos
+    })
   }
-  nextSegOrigStart = pos
 }
 function setProg(pct) { let v = Math.min(100, Math.max(0, pct)); $('upi').style.width = v + '%'; $('upthumb').style.left = v + '%' }
 function playBuffer(buf, origPos) {
@@ -336,7 +343,7 @@ function getTargetBPM() {
   let m = document.querySelector('#sm .act').dataset.m
   return m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
 }
-function genPreview() {
+async function genPreview() {
   if (!audioBuf) return
   stopCountIn(); stopVPreview(); stopPreview(); invalidateNextSeg()
   let op = $('op')
@@ -356,7 +363,9 @@ function genPreview() {
     let s = audioBuf.getChannelData(c), d = seg.getChannelData(c)
     for (let j = 0; j < segLen; j++) d[j] = s[segStart + j]
   }
-  let stretched = Math.abs(ratio - 1) < 0.01 ? seg : timeStretch(seg, ratio); segOrigStart = pos
+  let stretched = Math.abs(ratio - 1) < 0.01 ? seg : await timeStretch(seg, ratio)
+  if (_tsCancel !== 0 && !segOrigStart) return  // 已被新调用取代
+  segOrigStart = pos
   // 处理完成后才停旧播放、启新播放，避免断音
   stopPreview()
   playBuffer(stretched, pos)
@@ -373,7 +382,7 @@ am.forEach(b => b.onclick = () => { am.forEach(x => x.classList.remove('act')); 
 
 let vPreviewSrc = null; let vStartTime = 0; let progTimer = null; let vocalAudioPlayback = false
 $('vra').onchange = () => { if (audioBuf && $('upb-btn').textContent === '⏸' && document.querySelector('#am .act').dataset.m === 'inst') genVPreview() }
-function genVPreview() {
+async function genVPreview() {
   if (!audioBuf) return
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   if (audioBuf.numberOfChannels < 2) { err('单声道音频无法去人声'); return }
@@ -395,11 +404,8 @@ function genVPreview() {
     let s = audioBuf.getChannelData(c), d = seg.getChannelData(c)
     for (let j = 0; j < segLen; j++) d[j] = s[segStart + j]
   }
-  // Convert to Mid/Side, time-stretch both (phase vocoder preserves pitch),
-  // then scale Mid to remove vocals and convert back to L/R.
-  // This avoids independent L/R phase issues from ch-1 processing in timeStretch.
   let ms = midSide(seg)
-  let msStretched = Math.abs(ratio - 1) < 0.01 ? ms : timeStretch(ms, ratio)
+  let msStretched = Math.abs(ratio - 1) < 0.01 ? ms : await timeStretch(ms, ratio)
   let processed = fromMidSide(msStretched, parseInt($('vra').value) / 100)
   // 处理完成后才停旧播放、启新播放
   stopCountIn(); stopPreview(); stopVPreview()
@@ -441,7 +447,7 @@ $('go').onclick = async () => {
         let src = buf.getChannelData(c), dst = chunk.getChannelData(c)
         for (let j = 0; j < len; j++) dst[j] = src[start + j]
       }
-      let stretched = timeStretch(chunk, ratio)
+      let stretched = await timeStretch(chunk, ratio)
       let outStart = Math.round(start / ratio)
       let outLen = stretched.length
       for (let c = 0; c < ch; c++) {
@@ -875,7 +881,7 @@ function stopCountIn() {
   countInOscs = []
 }
 let precomputedFirstSeg = null
-function playCountIn() {
+async function playCountIn() {
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   stopPreview(); stopVPreview(); stopCountIn(); $('upb-btn').textContent = '⏸'; stopProgTimer()
   let op = $('op'); try { if (!op.paused) op.pause() } catch(e) {}
@@ -902,7 +908,7 @@ function playCountIn() {
         let s = audioBuf.getChannelData(c), d = seg.getChannelData(c)
         for (let j = 0; j < segLen; j++) d[j] = s[j]
       }
-      precomputedFirstSeg = timeStretch(seg, ratio)
+      precomputedFirstSeg = await timeStretch(seg, ratio)
     }
   }
   setProg(0); $('utm').textContent = '预备 ' + beats + ' 拍'
@@ -987,7 +993,9 @@ function ifft(re, im) {
   for (let i = 0; i < n; i++) { re[i] /= n; im[i] = -im[i] / n }
 }
 
-function timeStretch(buf, sFactor) {
+async function timeStretch(buf, sFactor) {
+  if (Math.abs(sFactor - 1) < 0.01) return buf
+  let myGen = ++_tsCancel
   let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
   let newLen = Math.round(ln / sFactor)
   let out = actx.createBuffer(ch, newLen, sr)
@@ -996,12 +1004,16 @@ function timeStretch(buf, sFactor) {
   for (let j = 0; j < fSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fSize))
   for (let c = 0; c < ch; c++) {
     let inp = buf.getChannelData(c), oup = out.getChannelData(c)
-    if (Math.abs(sFactor - 1) < 0.01) { for (let j = 0; j < Math.min(ln, newLen); j++) oup[j] = inp[j]; continue }
     let nrm = new Float32Array(newLen)
     let re = new Float32Array(fSize), im = new Float32Array(fSize)
     let prevPhase = new Float32Array(half), synPhase = new Float32Array(half)
-    let aPos = 0, sPos = 0
+    let aPos = 0, sPos = 0, frameIdx = 0
     while (aPos + fSize <= ln && sPos + fSize <= newLen) {
+      // 每4帧 yield 一次，让出主线程给 crossfade timer
+      if ((frameIdx & 3) === 0) {
+        if (_tsCancel !== myGen) return out
+        await new Promise(r => setTimeout(r, 0))
+      }
       for (let j = 0; j < fSize; j++) { re[j] = inp[aPos + j] * win[j]; im[j] = 0 }
       fft(re, im)
       if (sPos === 0) {
@@ -1026,7 +1038,7 @@ function timeStretch(buf, sFactor) {
       for (let k = 1; k < half; k++) { re[fSize - k] = re[k]; im[fSize - k] = -im[k] }
       ifft(re, im)
       for (let j = 0; j < fSize; j++) { oup[sPos + j] += re[j] * win[j]; nrm[sPos + j] += win[j] * win[j] }
-      aPos += aHop; sPos += sHop
+      aPos += aHop; sPos += sHop; frameIdx++
     }
     for (let j = 0; j < newLen; j++) if (nrm[j] > 0.001) oup[j] /= nrm[j]
   }
