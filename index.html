@@ -184,6 +184,7 @@ $('gi').onchange = e => { let f = e.target.files[0]; if (f) processFile(f) }
 })(document.querySelector('.ul'))
 document.querySelectorAll('#uic,#utx,#unt').forEach(el => el.addEventListener('click', () => { if (!$('fi').style.display || $('fi').style.display === 'none') $('gi').click() }))
 let previewSrc = null; let pStartTime = 0; let previewT = 0; let stretchedBuf = null; let segOrigStart = 0
+let curGainNode = null; let crossfading = false; let crossfadeScheduled = false; const xfadeDur = 0.05
 $('pct').oninput = () => {
   let v = parseInt($('pct').value); $('pctv').textContent = v + '%'
   if (audioBuf && obpm) { $('bpsv').textContent = Math.round(obpm * v / 100); $('bps').value = Math.round(obpm * v / 100) }
@@ -191,6 +192,7 @@ $('pct').oninput = () => {
 $('pct').onchange = () => { if (!audioBuf || $('upb-btn').textContent !== '⏸') return; if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview(); else genPreview() }
 function stopPreview() {
   if (previewSrc) { try { previewSrc.onended = null; previewSrc.stop() } catch(e) {} previewSrc = null }
+  curGainNode = null; crossfading = false; crossfadeScheduled = false
 }
 function stopVPreview() {
   vocalAudioPlayback = false
@@ -214,6 +216,36 @@ function startProgTimer() {
           if (origCur >= dur && dur > 0) { $('upb-btn').textContent = '▶'; stopAllPreviews(); stopProgTimer() }
           // 段尾预计算下一段（消除接续时的咔声）
           if (!nextSegBuffer && segDuration - cur < 3 && segDuration - cur > 0) precomputeNextSegment()
+          // 交叉淡化：段尾提前 50ms 淡出旧段、淡入新段，消除硬停咔声
+          let rem = segDuration - cur
+          if (rem > 0 && rem < xfadeDur + 0.02 && !crossfadeScheduled && nextSegBuffer) {
+            crossfadeScheduled = true
+            let ctx = actx, now = ctx.currentTime
+            // 旧段：立即淡出并在 rem 秒后停止
+            if (curGainNode) {
+              curGainNode.gain.cancelScheduledValues(now)
+              curGainNode.gain.setValueAtTime(curGainNode.gain.value, now)
+              curGainNode.gain.linearRampToValueAtTime(0, now + rem)
+            }
+            if (previewSrc) { try { previewSrc.onended = null; previewSrc.stop(now + rem) } catch(e) {} }
+            // 新段：提前 xfadeDur 开始淡入
+            let buf = nextSegBuffer; nextSegBuffer = null
+            let newSrc = ctx.createBufferSource()
+            newSrc.buffer = buf
+            let newGain = ctx.createGain()
+            let newStart = now + rem - xfadeDur
+            newGain.gain.setValueAtTime(0, newStart)
+            newGain.gain.linearRampToValueAtTime(1, newStart + xfadeDur)
+            newSrc.connect(newGain).connect(ctx.destination)
+            newSrc.onended = playbackEnded
+            newSrc.start(newStart)
+            previewSrc = newSrc
+            curGainNode = newGain
+            pStartTime = newStart
+            segOrigStart = nextSegOrigStart
+            segDuration = buf.length / buf.sampleRate
+            crossfading = true
+          }
           return
         }
       }
@@ -262,8 +294,11 @@ function playBuffer(buf, origPos) {
   src.onended = playbackEnded
   src.start(now)
   previewSrc = src
+  curGainNode = gain
   pStartTime = now
   segDuration = buf.length / buf.sampleRate
+  crossfading = false
+  crossfadeScheduled = false
   $('upb-btn').textContent = '⏸'
   startProgTimer()
 }
