@@ -221,11 +221,14 @@ function startLookahead() {
       newSrc.buffer = buf
       let newGain = ctx.createGain()
       let newStart = segEndTime - xfadeDur
+      // 计算当前原始位置，seek 到新段中对应位置，避免回退
+      let curOrigPos = segOrigStart + (now - pStartTime) * (previewT / obpm)
+      let seekOffset = Math.max(0, (curOrigPos - nextSegOrigStart) / (previewT / obpm))
       newGain.gain.setValueAtTime(0, newStart)
       newGain.gain.linearRampToValueAtTime(1, segEndTime)
       newSrc.connect(newGain).connect(ctx.destination)
       newSrc.onended = playbackEnded
-      newSrc.start(newStart)
+      newSrc.start(newStart, seekOffset)
       previewSrc = newSrc
       curGainNode = newGain
       pStartTime = newStart
