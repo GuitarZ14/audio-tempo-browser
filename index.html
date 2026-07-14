@@ -363,7 +363,7 @@ async function genPreview() {
     let s = audioBuf.getChannelData(c), d = seg.getChannelData(c)
     for (let j = 0; j < segLen; j++) d[j] = s[segStart + j]
   }
-  let stretched = Math.abs(ratio - 1) < 0.01 ? seg : await timeStretch(seg, ratio)
+  let stretched = Math.abs(ratio - 1) < 0.01 ? seg : await timeStretch(seg, ratio, true)
   segOrigStart = pos
   // 处理完成后才停旧播放、启新播放，避免断音
   stopPreview()
@@ -404,7 +404,7 @@ async function genVPreview() {
     for (let j = 0; j < segLen; j++) d[j] = s[segStart + j]
   }
   let ms = midSide(seg)
-  let msStretched = Math.abs(ratio - 1) < 0.01 ? ms : await timeStretch(ms, ratio)
+  let msStretched = Math.abs(ratio - 1) < 0.01 ? ms : await timeStretch(ms, ratio, true)
   let processed = fromMidSide(msStretched, parseInt($('vra').value) / 100)
   // 处理完成后才停旧播放、启新播放
   stopCountIn(); stopPreview(); stopVPreview()
@@ -992,7 +992,7 @@ function ifft(re, im) {
   for (let i = 0; i < n; i++) { re[i] /= n; im[i] = -im[i] / n }
 }
 
-async function timeStretch(buf, sFactor) {
+async function timeStretch(buf, sFactor, sync) {
   if (Math.abs(sFactor - 1) < 0.01) return buf
   let myGen = ++_tsCancel
   let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
@@ -1008,8 +1008,8 @@ async function timeStretch(buf, sFactor) {
     let prevPhase = new Float32Array(half), synPhase = new Float32Array(half)
     let aPos = 0, sPos = 0, frameIdx = 0
     while (aPos + fSize <= ln && sPos + fSize <= newLen) {
-      // 每4帧 yield 一次，让出主线程给 crossfade timer
-      if ((frameIdx & 3) === 0) {
+      // sync模式不yield，阻塞主线程但立即返回结果；async模式每4帧yield让出主线程
+      if (!sync && (frameIdx & 3) === 0) {
         if (_tsCancel !== myGen) return out
         await new Promise(r => setTimeout(r, 0))
       }
