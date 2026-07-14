@@ -202,10 +202,11 @@ function startLookahead() {
     if (!previewSrc || !audioBuf || !previewT) return
     let ctx = actx; if (!ctx) return
     let now = ctx.currentTime
-    // 段尾 1s 内：预计算下一段
+    // 段尾预计算：根据变速比动态调整窗口，低速时 timeStretch 耗时更长
     let rem = segEndTime - now
-    if (rem > 0 && rem < 1 && !nextSegBuffer) precomputeNextSegment()
-    // 段尾 70ms 内：交叉淡化，精确调度
+    let precomputeWindow = Math.max(5, 6 * Math.abs(1 - previewT / obpm))
+    if (rem > 0 && rem < precomputeWindow && !nextSegBuffer) precomputeNextSegment()
+    // 段尾交叉淡化
     if (rem > 0 && rem < xfadeDur + 0.02 && nextSegBuffer) {
       let buf = nextSegBuffer; nextSegBuffer = null
       // 旧段：线性淡出，在 segEndTime 停止
