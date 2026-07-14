@@ -232,8 +232,8 @@ function startLookahead() {
       previewSrc = newSrc
       curGainNode = newGain
       pStartTime = newStart
-      segOrigStart = nextSegOrigStart
-      segDuration = buf.length / buf.sampleRate
+      segOrigStart = nextSegOrigStart + seekOffset * (previewT / obpm)
+      segDuration = buf.length / buf.sampleRate - seekOffset
       segEndTime = newStart + segDuration
     }
   }, 50)
