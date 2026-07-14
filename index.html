@@ -364,7 +364,6 @@ async function genPreview() {
     for (let j = 0; j < segLen; j++) d[j] = s[segStart + j]
   }
   let stretched = Math.abs(ratio - 1) < 0.01 ? seg : await timeStretch(seg, ratio)
-  if (_tsCancel !== 0 && !segOrigStart) return  // 已被新调用取代
   segOrigStart = pos
   // 处理完成后才停旧播放、启新播放，避免断音
   stopPreview()
