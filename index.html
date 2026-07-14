@@ -129,6 +129,95 @@ let actx, file, obpm = 120, bn = '', audioBuf = null, obSig = '4/4', origAudioUr
 let segDuration = 0, nextSegBuffer = null, nextSegOrigStart = 0, _tsCancel = 0, _precomputing = false
 let $ = id => document.getElementById(id)
 
+// Web Worker for time-stretch (runs off main thread, no UI freeze)
+let _tsWorker = null
+;(function initTimeStretchWorker() {
+  let code = `
+    function fft(re, im) {
+      let n = re.length
+      for (let i = 1; i < n; i++) {
+        let j = 0
+        for (let k = 0; (1 << k) < n; k++) j = (j << 1) | ((i >> k) & 1)
+        if (j > i) { let tr = re[i]; re[i] = re[j]; re[j] = tr; let ti = im[i]; im[i] = im[j]; im[j] = ti }
+      }
+      for (let len = 2; len <= n; len <<= 1) {
+        let half = len >> 1, wRe = Math.cos(-2 * Math.PI / len), wIm = Math.sin(-2 * Math.PI / len)
+        for (let i = 0; i < n; i += len) {
+          let tRe = 1, tIm = 0
+          for (let j = 0; j < half; j++) {
+            let uRe = re[i + j], uIm = im[i + j]
+            let vRe = re[i + j + half] * tRe - im[i + j + half] * tIm
+            let vIm = re[i + j + half] * tIm + im[i + j + half] * tRe
+            re[i + j] = uRe + vRe; im[i + j] = uIm + vIm
+            re[i + j + half] = uRe - vRe; im[i + j + half] = uIm - vIm
+            let nRe = tRe * wRe - tIm * wIm, nIm = tRe * wIm + tIm * wRe
+            tRe = nRe; tIm = nIm
+          }
+        }
+      }
+    }
+    function ifft(re, im) {
+      let n = re.length
+      for (let i = 0; i < n; i++) im[i] = -im[i]
+      fft(re, im)
+      for (let i = 0; i < n; i++) { re[i] /= n; im[i] = -im[i] / n }
+    }
+    self.onmessage = function(e) {
+      let d = e.data
+      if (d.type === 'stretch') {
+        let chData = d.channels  // Float32Array[]
+        let sr = d.sampleRate, sFactor = d.sFactor, id = d.id
+        let ln = chData[0].length, ch = chData.length
+        let newLen = Math.round(ln / sFactor)
+        let fSize = 2048, half = fSize >> 1, aHop = Math.round(fSize / 4), sHop = Math.round(aHop / sFactor)
+        let win = new Float32Array(fSize)
+        for (let j = 0; j < fSize; j++) win[j] = 0.5 * (1 - Math.cos(2 * Math.PI * j / fSize))
+        let outChannels = []
+        for (let c = 0; c < ch; c++) {
+          let inp = chData[c], oup = new Float32Array(newLen)
+          let nrm = new Float32Array(newLen)
+          let re = new Float32Array(fSize), im = new Float32Array(fSize)
+          let prevPhase = new Float32Array(half), synPhase = new Float32Array(half)
+          let aPos = 0, sPos = 0, frameIdx = 0
+          while (aPos + fSize <= ln && sPos + fSize <= newLen) {
+            for (let j = 0; j < fSize; j++) { re[j] = inp[aPos + j] * win[j]; im[j] = 0 }
+            fft(re, im)
+            if (sPos === 0) {
+              for (let k = 0; k < half; k++) {
+                let mag = Math.sqrt(re[k] * re[k] + im[k] * im[k])
+                let ph = Math.atan2(im[k], re[k])
+                prevPhase[k] = ph; synPhase[k] = ph
+                re[k] = mag * Math.cos(ph); im[k] = mag * Math.sin(ph)
+              }
+            } else {
+              for (let k = 0; k < half; k++) {
+                let mag = Math.sqrt(re[k] * re[k] + im[k] * im[k])
+                let ph = Math.atan2(im[k], re[k])
+                let delta = ph - prevPhase[k] - k * 2 * Math.PI * aHop / fSize
+                delta -= 2 * Math.PI * Math.round(delta / (2 * Math.PI))
+                synPhase[k] += (k + delta * fSize / (2 * Math.PI * aHop)) * 2 * Math.PI * sHop / fSize
+                prevPhase[k] = ph
+                re[k] = mag * Math.cos(synPhase[k]); im[k] = mag * Math.sin(synPhase[k])
+              }
+            }
+            for (let k = 1; k < half; k++) { re[fSize - k] = re[k]; im[fSize - k] = -im[k] }
+            ifft(re, im)
+            for (let j = 0; j < fSize; j++) { oup[sPos + j] += re[j] * win[j]; nrm[sPos + j] += win[j] * win[j] }
+            aPos += aHop; sPos += sHop; frameIdx++
+          }
+          for (let j = 0; j < newLen; j++) if (nrm[j] > 0.001) oup[j] /= nrm[j]
+          outChannels.push(oup)
+        }
+        self.postMessage({ type: 'result', id: id, channels: outChannels, newLen: newLen, sampleRate: sr })
+      }
+    }
+  `
+  let blob = new Blob([code], { type: 'application/javascript' })
+  let url = URL.createObjectURL(blob)
+  try { _tsWorker = new Worker(url) } catch(e) { console.warn('Web Worker not available, falling back to main-thread timeStretch') }
+  URL.revokeObjectURL(url)
+})()
+
 function getActx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx }
 
 function updateSliderDots() {
@@ -364,7 +453,7 @@ async function genPreview() {
     let s = audioBuf.getChannelData(c), d = seg.getChannelData(c)
     for (let j = 0; j < segLen; j++) d[j] = s[segStart + j]
   }
-  let stretched = Math.abs(ratio - 1) < 0.01 ? seg : await timeStretch(seg, ratio, true)
+  let stretched = Math.abs(ratio - 1) < 0.01 ? seg : await timeStretch(seg, ratio)
   segOrigStart = pos
   // 处理完成后才停旧播放、启新播放，避免断音
   stopPreview()
@@ -405,7 +494,7 @@ async function genVPreview() {
     for (let j = 0; j < segLen; j++) d[j] = s[segStart + j]
   }
   let ms = midSide(seg)
-  let msStretched = Math.abs(ratio - 1) < 0.01 ? ms : await timeStretch(ms, ratio, true)
+  let msStretched = Math.abs(ratio - 1) < 0.01 ? ms : await timeStretch(ms, ratio)
   let processed = fromMidSide(msStretched, parseInt($('vra').value) / 100)
   // 处理完成后才停旧播放、启新播放
   stopPreview(); stopVPreview()
@@ -918,9 +1007,31 @@ function ifft(re, im) {
   for (let i = 0; i < n; i++) { re[i] /= n; im[i] = -im[i] / n }
 }
 
-async function timeStretch(buf, sFactor, sync) {
-  if (Math.abs(sFactor - 1) < 0.01) return buf
-  let myGen = ++_tsCancel
+function timeStretch(buf, sFactor) {
+  if (Math.abs(sFactor - 1) < 0.01) return Promise.resolve(buf)
+  // Web Worker path: computation runs off main thread, UI never freezes
+  if (_tsWorker) {
+    let ch = buf.numberOfChannels, sr = buf.sampleRate, ln = buf.length
+    let channels = []
+    for (let c = 0; c < ch; c++) channels.push(new Float32Array(buf.getChannelData(c)))
+    let id = ++_tsCancel
+    return new Promise(resolve => {
+      let handler = (e) => {
+        if (e.data.id !== id) return
+        _tsWorker.removeEventListener('message', handler)
+        let d = e.data, out = actx.createBuffer(ch, d.newLen, sr)
+        for (let c = 0; c < ch; c++) out.getChannelData(c).set(d.channels[c])
+        resolve(out)
+      }
+      _tsWorker.addEventListener('message', handler)
+      _tsWorker.postMessage({ type: 'stretch', channels, sampleRate: sr, sFactor, id })
+    })
+  }
+  // Fallback: main-thread async (yields every 8 frames instead of 4 to reduce overhead)
+  return timeStretchMain(buf, sFactor)
+}
+
+async function timeStretchMain(buf, sFactor) {
   let sr = buf.sampleRate, ch = buf.numberOfChannels, ln = buf.length
   let newLen = Math.round(ln / sFactor)
   let out = actx.createBuffer(ch, newLen, sr)
@@ -934,11 +1045,7 @@ async function timeStretch(buf, sFactor, sync) {
     let prevPhase = new Float32Array(half), synPhase = new Float32Array(half)
     let aPos = 0, sPos = 0, frameIdx = 0
     while (aPos + fSize <= ln && sPos + fSize <= newLen) {
-      // sync模式不yield，阻塞主线程但立即返回结果；async模式每4帧yield让出主线程
-      if (!sync && (frameIdx & 3) === 0) {
-        if (_tsCancel !== myGen) return out
-        await new Promise(r => setTimeout(r, 0))
-      }
+      if ((frameIdx & 7) === 0) await new Promise(r => setTimeout(r, 0))
       for (let j = 0; j < fSize; j++) { re[j] = inp[aPos + j] * win[j]; im[j] = 0 }
       fft(re, im)
       if (sPos === 0) {
@@ -959,7 +1066,6 @@ async function timeStretch(buf, sFactor, sync) {
           re[k] = mag * Math.cos(synPhase[k]); im[k] = mag * Math.sin(synPhase[k])
         }
       }
-      // Enforce conjugate symmetry for real-signal IFFT
       for (let k = 1; k < half; k++) { re[fSize - k] = re[k]; im[fSize - k] = -im[k] }
       ifft(re, im)
       for (let j = 0; j < fSize; j++) { oup[sPos + j] += re[j] * win[j]; nrm[sPos + j] += win[j] * win[j] }
