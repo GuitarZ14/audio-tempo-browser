@@ -204,7 +204,7 @@ function startLookahead() {
     let now = ctx.currentTime
     // 段尾预计算：根据变速比动态调整窗口，低速时 timeStretch 耗时更长
     let rem = segEndTime - now
-    let precomputeWindow = Math.max(5, 6 * Math.abs(1 - previewT / obpm))
+    let precomputeWindow = Math.max(8, 10 * Math.abs(1 - previewT / obpm))
     if (rem > 0 && rem < precomputeWindow && !nextSegBuffer) precomputeNextSegment()
     // 段尾交叉淡化
     if (rem > 0 && rem < xfadeDur + 0.02 && nextSegBuffer) {
