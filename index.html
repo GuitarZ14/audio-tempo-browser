@@ -712,6 +712,28 @@ function detectSigScores(buf, bpm) {
   if (lag3 < nf) { let s = 0, c = 0; for (let i = 0; i + lag3 < nf; i++) { s += onset[i] * onset[i + lag3]; c++ } ac3 = c > 0 ? s / c : 0 }
   if (lag4 < nf) { let s = 0, c = 0; for (let i = 0; i + lag4 < nf; i++) { s += onset[i] * onset[i + lag4]; c++ } ac4 = c > 0 ? s / c : 0 }
 
+  // --- 6/8 detection at eighth-note level ---
+  // 假设 BPM 是附点四分音符（6/8 常见），八分音符 = bf/3 帧
+  let ebf = Math.round(bf / 3)  // 每个八分音符的帧数
+  let ac6 = 0, s6beats = null, best6Score = -1
+  if (ebf >= 2) {
+    let lag6 = Math.round(ebf * 6)  // 一个 6/8 小节的长度
+    // 自相关在6拍延迟处
+    if (lag6 < nf) { let s = 0, c = 0; for (let i = 0; i + lag6 < nf; i++) { s += onset[i] * onset[i + lag6]; c++ } ac6 = c > 0 ? s / c : 0 }
+    // 每个相位计算6拍模式：[1,2,3,4,5,6]，检测 beat1 和 beat4 是否都强
+    for (let ph = 0; ph < ebf; ph++) {
+      let s6 = [0, 0, 0, 0, 0, 0], c6 = 0
+      for (let m = ph; m + 6 * ebf <= nf; m += 6 * ebf) {
+        for (let b = 0; b < 6; b++) s6[b] += onset[m + b * ebf]
+        c6++
+      }
+      if (c6 > 0) for (let b = 0; b < 6; b++) s6[b] /= c6
+      // 6/8 得分：beat1 和 beat4 都强，中间弱
+      let sc6 = (s6[0] + s6[3]) / 2 - (s6[1] + s6[2] + s6[4] + s6[5]) / 4
+      if (sc6 > best6Score) { best6Score = sc6; s6beats = s6.slice() }
+    }
+  }
+
   // --- Accent-based scoring (same phase comparison) ---
   let best4 = 0, best3 = 0, best6 = 0, beats3 = null
   let votes3 = 0, votes4 = 0  // per-phase fair comparison
@@ -744,12 +766,19 @@ function detectSigScores(buf, bpm) {
   if (!beats3) beats3 = [0, 0, 1]
   let waltzOk = beats3[0] > beats3[1] && beats3[0] >= beats3[2]
 
-  // --- Decision: autocorrelation primary, accent votes secondary, 4/4 bias for ties ---
+  // --- Decision: 6/8 first, then 3/4, default 4/4 ---
   let sig = '4/4'
-  let acFav3 = ac3 > ac4 * 1.05   // AC at 3-beat lag wins by >5%
-  let voteFav3 = votes3 > votes4  // majority of phases favor 3/4
-  let accentFav3 = best3 > best4 * 0.6  // accent score not totally against 3/4
-  if (acFav3 && voteFav3 && accentFav3 && waltzOk) sig = '3/4'
+
+  // 6/8 判断：beat1 和 beat4 都强（两组三拍），自相关支持，且比 4/4 强
+  if (s6beats && best6Score > 0.1 && ac6 > ac4 * 0.8 && best6Score > best4 / 1.5 * 0.5) {
+    sig = '6/8'
+  } else {
+    // 3/4 vs 4/4
+    let acFav3 = ac3 > ac4 * 1.05
+    let voteFav3 = votes3 > votes4
+    let accentFav3 = best3 > best4 * 0.6
+    if (acFav3 && voteFav3 && accentFav3 && waltzOk) sig = '3/4'
+  }
 
   return { sig, s4: best4, s6: best6, s3: best3, waltz: waltzOk }
 }
