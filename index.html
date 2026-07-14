@@ -710,10 +710,10 @@ function detectSig(buf, bpm) {
 
 function detectKey(buf) {
   let sr = buf.sampleRate, ch = buf.numberOfChannels, n = buf.length
-  let maxN = Math.min(n, Math.round(25 * sr))
+  let maxN = Math.min(n, Math.round(30 * sr))
   let mono = new Float32Array(maxN)
   for (let c = 0; c < ch; c++) { let d = buf.getChannelData(c); for (let i = 0; i < maxN; i++) mono[i] += d[i] / ch }
-  let fftSize = 2048, hop = 1024
+  let fftSize = 4096, hop = 2048
   let nf = Math.floor((maxN - fftSize) / hop) + 1
   if (nf < 10) return 'N/A'
   let win = new Float32Array(fftSize)
@@ -721,62 +721,70 @@ function detectKey(buf) {
   let chroma = new Float32Array(12)
   let re = new Float32Array(fftSize), im = new Float32Array(fftSize)
   let nBins = fftSize >> 1
-  let binMin = Math.ceil(80 / (sr / fftSize)), binMax = Math.min(nBins, Math.floor(4000 / (sr / fftSize)))
-  let smoothSpec = new Float32Array(nBins)
-  // 累积谱能量并计算平滑谱
-  let specSum = new Float32Array(nBins)
-  for (let i = 0; i < nf; i++) {
-    let off = i * hop
-    for (let j = 0; j < fftSize; j++) { re[j] = mono[off + j] * win[j]; im[j] = 0 }
-    fft(re, im)
-    for (let k = 0; k < nBins; k++) {
-      specSum[k] += Math.sqrt(re[k] * re[k] + im[k] * im[k])
-    }
-  }
-  for (let k = 0; k < nBins; k++) smoothSpec[k] = specSum[k] / nf
-  // 用平滑谱做白化，再算 chroma
+  let binHz = sr / fftSize
+  // 频率范围：60Hz ~ 5000Hz，覆盖基频 + 有用泛音
+  let binMin = Math.ceil(60 / binHz), binMax = Math.min(nBins, Math.floor(5000 / binHz))
+  // 累积每帧 chroma（不做白化，直接用 log(mag) 压缩动态范围）
   for (let i = 0; i < nf; i++) {
     let off = i * hop
     for (let j = 0; j < fftSize; j++) { re[j] = mono[off + j] * win[j]; im[j] = 0 }
     fft(re, im)
     for (let k = binMin; k <= binMax; k++) {
       let mag = Math.sqrt(re[k] * re[k] + im[k] * im[k])
-      let floor = smoothSpec[k]
-      if (floor < 1e-10) continue
-      let whitened = Math.log(1 + mag / floor)
-      let freq = k * sr / fftSize
+      if (mag < 1e-10) continue
+      let val = Math.log(1 + mag * 10)  // 对数压缩，保留相对强弱
+      let freq = k * binHz
       let midi = 12 * Math.log2(freq / 440) + 69
       let bin = ((midi % 12) + 12) % 12
       let frac = bin - Math.floor(bin)
       let b0 = Math.floor(bin) % 12
       let b1 = (b0 + 1) % 12
-      chroma[b0] += whitened * (1 - frac)
-      chroma[b1] += whitened * frac
+      // 按八度加权：低八度贡献稍大（基频更可靠）
+      let octave = Math.floor(midi / 12)
+      let octW = octave <= 4 ? 1.2 : (octave <= 6 ? 1.0 : 0.7)
+      chroma[b0] += val * (1 - frac) * octW
+      chroma[b1] += val * frac * octW
     }
   }
   let total = 0
   for (let i = 0; i < 12; i++) total += chroma[i]
   if (total < 1e-10) return 'N/A'
   for (let i = 0; i < 12; i++) chroma[i] /= total
-  let majorProfile = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
-  let minorProfile = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
-  let mpSum = 0, mipSum = 0
-  for (let i = 0; i < 12; i++) { mpSum += majorProfile[i]; mipSum += minorProfile[i] }
-  for (let i = 0; i < 12; i++) { majorProfile[i] /= mpSum; minorProfile[i] /= mipSum }
-  let sharpKeys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+  // Krumhansl-Schmuckler key profiles
+  let majorProf = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+  let minorProf = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+  // 归一化 profile
+  let mpAvg = 0, mnpAvg = 0
+  for (let i = 0; i < 12; i++) { mpAvg += majorProf[i]; mnpAvg += minorProf[i] }
+  mpAvg /= 12; mnpAvg /= 12
+  let mpS = 0, mnpS = 0
+  for (let i = 0; i < 12; i++) { mpS += (majorProf[i] - mpAvg) ** 2; mnpS += (minorProf[i] - mnpAvg) ** 2 }
+  let mpStd = Math.sqrt(mpS), mnpStd = Math.sqrt(mnpS)
+  for (let i = 0; i < 12; i++) { majorProf[i] = (majorProf[i] - mpAvg) / mpStd; minorProf[i] = (minorProf[i] - mnpAvg) / mnpStd }
+  // chroma 均值和标准差（用于 Pearson 相关）
+  let cAvg = 0
+  for (let i = 0; i < 12; i++) cAvg += chroma[i]
+  cAvg /= 12
+  let cVar = 0
+  for (let i = 0; i < 12; i++) cVar += (chroma[i] - cAvg) ** 2
+  let cStd = Math.sqrt(cVar)
+  if (cStd < 1e-10) return 'N/A'
+  // 用 flat 命名（Db 而非 C#，Ab 而非 G#）
   let flatKeys  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
-  let sharpMinors = ['Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Bm']
-  let flatMinors  = ['Cm', 'Dbm', 'Dm', 'Ebm', 'Em', 'Fm', 'Gbm', 'Gm', 'Abm', 'Am', 'Bbm', 'Bm']
+  let flatMinors = ['Cm', 'Dbm', 'Dm', 'Ebm', 'Em', 'Fm', 'Gbm', 'Gm', 'Abm', 'Am', 'Bbm', 'Bm']
   let bestKey = 'C', bestCorr = -Infinity
   for (let shift = 0; shift < 12; shift++) {
-    let corrM = 0, corrM1 = 0
+    // Pearson correlation：shift 后的 chroma 与 profile 的相关系数
+    let sumXYm = 0, sumXYn = 0
     for (let i = 0; i < 12; i++) {
       let idx = (i + shift) % 12
-      corrM += chroma[idx] * majorProfile[i]
-      corrM1 += chroma[idx] * minorProfile[i]
+      let c = (chroma[idx] - cAvg) / cStd
+      sumXYm += c * majorProf[i]
+      sumXYn += c * minorProf[i]
     }
+    let corrM = sumXYm / 12, corrN = sumXYn / 12
     if (corrM > bestCorr) { bestCorr = corrM; bestKey = flatKeys[shift] }
-    if (corrM1 > bestCorr) { bestCorr = corrM1; bestKey = flatMinors[shift] }
+    if (corrN > bestCorr) { bestCorr = corrN; bestKey = flatMinors[shift] }
   }
   return bestKey
 }
