@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>变速伴奏生成器</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js" defer></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#f0f4f8,#e2e8f0);min-height:100vh;color:#1a202c;padding:20px}
@@ -513,6 +514,7 @@ $('go').onclick = async () => {
   $('go').disabled = true; $('st').classList.add('sh'); $('ra').classList.remove('sh'); pb(0); hideErr()
 
   try {
+    if (typeof lamejs === 'undefined' || !lamejs.Mp3Encoder) { err('MP3 编码库加载失败，请刷新页面重试'); $('go').disabled = false; return }
     actx = getActx()
     let buf = audioBuf
     if (!buf) buf = await actx.decodeAudioData(await file.arrayBuffer())
@@ -562,11 +564,11 @@ $('go').onclick = async () => {
     pb(60)
 
     stx('生成文件...'); pb(85)
-    let wav = toWav(result)
-    let blob = new Blob([wav], {type:'audio/wav'})
+    let mp3Parts = toMp3(result)
+    let blob = new Blob(mp3Parts, {type:'audio/mp3'})
     let url = URL.createObjectURL(blob)
     let a = document.createElement('a')
-    a.href = url; a.download = bn + '_' + (sm === 'pct' ? $('pct').value + '%' : tgt + 'bpm') + (document.querySelector('#am .act').dataset.m === 'inst' ? '（去人声伴奏）' : '') + '.wav'; a.click()
+    a.href = url; a.download = bn + '_' + (sm === 'pct' ? $('pct').value + '%' : tgt + 'bpm') + (document.querySelector('#am .act').dataset.m === 'inst' ? '（去人声伴奏）' : '') + '.mp3'; a.click()
     URL.revokeObjectURL(url)
     stx('✅ 已保存'); pb(100)
   } catch(e) { err('处理失败: ' + e.message); console.error(e) }
@@ -1092,21 +1094,38 @@ async function timeStretchMain(buf, sFactor) {
   return out
 }
 
-function toWav(buf) {
-  let ch = buf.numberOfChannels, sr = buf.sampleRate, ln = buf.length
-  let dl = ln * ch * 2, a = new ArrayBuffer(44 + dl), v = new DataView(a)
-  let w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)) }
-  w(0,'RIFF'); v.setUint32(4,36+dl,true); w(8,'WAVE')
-  w(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true)
-  v.setUint16(22,ch,true); v.setUint32(24,sr,true)
-  v.setUint32(28,sr*ch*2,true); v.setUint16(32,ch*2,true); v.setUint16(34,16,true)
-  w(36,'data'); v.setUint32(40,dl,true)
-  let o = 44
-  for (let i = 0; i < ln; i++) for (let c = 0; c < ch; c++) {
-    let s = Math.max(-1, Math.min(1, buf.getChannelData(c)[i]))
-    v.setInt16(o, s < 0 ? s * 32768 : s * 32767, true); o += 2
+function toMp3(buf, bitrate) {
+  if (!bitrate) bitrate = 192
+  let ch = Math.min(buf.numberOfChannels, 2), sr = buf.sampleRate, ln = buf.length
+  let encoder = new lamejs.Mp3Encoder(ch, sr, bitrate)
+  let mp3Data = [], chunk = 1152, floatBuf = new Float32Array(chunk)
+  for (let i = 0; i < ln; i += chunk) {
+    let len = Math.min(chunk, ln - i)
+    if (ch === 1) {
+      let samples = new Int16Array(len)
+      let data = buf.getChannelData(0)
+      for (let j = 0; j < len; j++) {
+        let s = Math.max(-1, Math.min(1, data[i + j]))
+        samples[j] = s < 0 ? s * 32768 : s * 32767
+      }
+      let mp3buf = encoder.encodeBuffer(samples)
+      if (mp3buf.length > 0) mp3Data.push(mp3buf)
+    } else {
+      let left = new Int16Array(len), right = new Int16Array(len)
+      let ldata = buf.getChannelData(0), rdata = buf.getChannelData(1)
+      for (let j = 0; j < len; j++) {
+        let ls = Math.max(-1, Math.min(1, ldata[i + j]))
+        let rs = Math.max(-1, Math.min(1, rdata[i + j]))
+        left[j] = ls < 0 ? ls * 32768 : ls * 32767
+        right[j] = rs < 0 ? rs * 32768 : rs * 32767
+      }
+      let mp3buf = encoder.encodeBuffer(left, right)
+      if (mp3buf.length > 0) mp3Data.push(mp3buf)
+    }
   }
-  return a
+  let last = encoder.flush()
+  if (last.length > 0) mp3Data.push(last)
+  return mp3Data
 }
 
 function stx(t) { $('stx').textContent = t }
