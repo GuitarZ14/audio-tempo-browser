@@ -528,7 +528,7 @@ $('go').onclick = async () => {
     if (ratio > 4) ratio = 4
     // 分段 timeStretch：避免整文件相位累积误差 + 让进度条可更新
     let sr = buf.sampleRate, ch = buf.numberOfChannels, srcLen = buf.length
-    let chunkSrcSamples = Math.round(15 * sr)  // 每段取15s源音频
+    let chunkSrcSamples = Math.round(30 * sr)  // 每段取30s源音频
     let totalChunks = Math.ceil(srcLen / chunkSrcSamples)
     let totalOutLen = Math.round(srcLen / ratio)
     let result = actx.createBuffer(ch, totalOutLen, sr)
@@ -559,7 +559,7 @@ $('go').onclick = async () => {
         }
       }
       pb(Math.round(30 + 30 * (i + 1) / totalChunks))
-      if (i < totalChunks - 1) await new Promise(r => setTimeout(r, 0))  // 让出主线程
+      if (i < totalChunks - 1 && i % 2 === 0) await new Promise(r => requestAnimationFrame(r))
     }
     pb(60)
 
@@ -1098,7 +1098,7 @@ function toMp3(buf, bitrate) {
   if (!bitrate) bitrate = 192
   let ch = Math.min(buf.numberOfChannels, 2), sr = buf.sampleRate, ln = buf.length
   let encoder = new lamejs.Mp3Encoder(ch, sr, bitrate)
-  let mp3Data = [], chunk = 1152, floatBuf = new Float32Array(chunk)
+  let mp3Data = [], chunk = 1152 * 50  // 批量编码，减少函数调用开销
   for (let i = 0; i < ln; i += chunk) {
     let len = Math.min(chunk, ln - i)
     if (ch === 1) {
