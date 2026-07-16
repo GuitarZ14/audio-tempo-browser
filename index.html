@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>变速伴奏生成器</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js" defer></script>
+
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#f0f4f8,#e2e8f0);min-height:100vh;color:#1a202c;padding:20px}
@@ -57,6 +57,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .lb span{font-size:14px;color:#4a5568}
 .pv{display:block;width:100%;margin-top:8px;padding:10px;border-radius:20px;border:1px solid rgba(78,205,196,.4);background:transparent;color:#4ecdc4;font-size:14px;cursor:pointer}
 .pv:hover{background:rgba(78,205,196,.06)}
+.pitch-section{margin-top:6px}
+.pitch-label{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.pitch-label .p-title{font-size:13px;color:#718096}
+.pitch-label .p-value{font-size:28px;font-weight:800;letter-spacing:-1px;color:#4ecdc4}
+.pitch-label .p-value.down{color:#4a90d9}
+.pitch-label .p-value.up{color:#dc3c35}
+.pitch-label .p-unit{font-size:13px;color:#718096;font-weight:400}
+.pitch-track{position:relative;height:40px;background:#edf2f7;border-radius:20px;cursor:pointer;touch-action:none;user-select:none}
+.pitch-track .tf{position:absolute;top:0;height:100%;border-radius:20px;pointer-events:none}
+.pitch-track .tf.left{left:0;background:linear-gradient(90deg,#4a90d9,#6bb3e0);border-radius:20px 4px 4px 20px}
+.pitch-track .tf.right{right:50%;background:linear-gradient(90deg,#f06a5a,#dc3c35);border-radius:4px 20px 20px 4px}
+.pitch-track .thumb{position:absolute;top:50%;width:30px;height:30px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18);transform:translate(-50%,-50%);pointer-events:none;border:2px solid #4ecdc4;z-index:2;display:none}
+.pitch-track:hover .thumb,.pitch-track.dragging .thumb{display:block}
+.pitch-track .cm{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:2px;height:16px;background:#cbd5e0;border-radius:1px;pointer-events:none;z-index:1}
+.pitch-marks{display:flex;justify-content:space-between;margin-top:3px;padding:0 2px}
+.pitch-marks span{font-size:9px;color:#a0aec0;width:18px;text-align:center}
 .sc{display:flex;gap:0;margin:0 0 12px}
 .sc button{flex:1;padding:9px;border:1px solid rgba(78,205,196,.4);background:transparent;color:#718096;cursor:pointer;font-size:14px;transition:all .15s}
 .sc button:first-child{border-radius:10px 0 0 10px}
@@ -108,6 +124,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </div>
 </div>
 <div class="card">
+<div class="pitch-section">
+<div class="pitch-label">
+<span class="p-title">升降调</span>
+<span><span class="p-value" id="pv">0</span><span class="p-unit"> 个半音</span></span>
+</div>
+<div class="pitch-track" id="pt">
+<div class="tf left" id="pfl" style="display:none"></div>
+<div class="tf right" id="pfr" style="display:none"></div>
+<div class="cm"></div>
+<div class="thumb" id="pthumb"></div>
+</div>
+<div class="pitch-marks">
+<span>-12</span><span>-9</span><span>-6</span><span>-3</span><span>0</span><span>+3</span><span>+6</span><span>+9</span><span>+12</span>
+</div>
+</div>
+</div>
+<div class="card">
 <div style="font-size:14px;color:#aaa;margin-bottom:10px">音频类型</div>
 <div class="sc" id="am">
 <button class="act" data-m="vocal">🎤 初始音频</button>
@@ -128,6 +161,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <script>
 let actx, file, obpm = 120, bn = '', audioBuf = null, obSig = '4/4', origAudioUrl = null
 let segDuration = 0, nextSegBuffer = null, nextSegOrigStart = 0, _tsCancel = 0, _precomputing = false
+let currentPitch = 0  // semitones, -12 to +12
+function getPitchFactor() { return Math.pow(2, currentPitch / 12) }
+function getPitchStretchRatio(tgtBPM) { return (tgtBPM / obpm) / getPitchFactor() }
 let $ = id => document.getElementById(id)
 
 // Web Worker for time-stretch (runs off main thread, no UI freeze)
@@ -257,6 +293,7 @@ async function processFile(f) {
       $('fin').textContent = f.name
     } else { obpm = 120; $('bpmn').textContent = 'BPM 检测失败，默认 120' }
     $('pct').value = 100; $('pctv').textContent = '100%'; $('bps').max = obpm; $('bps').value = obpm; $('bpsv').textContent = obpm; updateSliderDots()
+    currentPitch = 0; renderPitchUI()
     let op = $('op'); if (op.src) URL.revokeObjectURL(op.src)
     origAudioUrl = URL.createObjectURL(f)
     op.src = origAudioUrl
@@ -290,9 +327,11 @@ function startLookahead() {
     if (!previewSrc || !audioBuf || !previewT) return
     let ctx = actx; if (!ctx) return
     let now = ctx.currentTime
-    // 段尾预计算：根据变速比动态调整窗口，低速时 timeStretch 耗时更长
+    let pf = getPitchFactor()
+    let combinedRatio = getPitchStretchRatio(previewT)
+    // 段尾预计算：根据 combined 变速比动态调整窗口
     let rem = segEndTime - now
-    let precomputeWindow = Math.max(8, 10 * Math.abs(1 - previewT / obpm))
+    let precomputeWindow = Math.max(8, 10 * Math.max(Math.abs(1 - combinedRatio), Math.abs(1 - pf)))
     if (rem > 0 && rem < precomputeWindow && !nextSegBuffer && !_precomputing) {
       _precomputing = true
       precomputeNextSegment().then(() => { _precomputing = false })
@@ -310,11 +349,12 @@ function startLookahead() {
       // 新段：提前 xfadeDur 开始，线性淡入，在 segEndTime 达到 1
       let newSrc = ctx.createBufferSource()
       newSrc.buffer = buf
+      newSrc.playbackRate.value = pf
       let newGain = ctx.createGain()
       let newStart = segEndTime - xfadeDur
       // 计算当前原始位置，seek 到新段中对应位置，避免回退
       let curOrigPos = segOrigStart + (now - pStartTime) * (previewT / obpm)
-      let seekOffset = Math.max(0, (curOrigPos - nextSegOrigStart) / (previewT / obpm))
+      let seekOffset = Math.max(0, (curOrigPos - nextSegOrigStart) / (previewT / obpm) * pf)
       newGain.gain.setValueAtTime(0, newStart)
       newGain.gain.linearRampToValueAtTime(1, segEndTime)
       newSrc.connect(newGain).connect(ctx.destination)
@@ -323,8 +363,8 @@ function startLookahead() {
       previewSrc = newSrc
       curGainNode = newGain
       pStartTime = newStart
-      segOrigStart = nextSegOrigStart + seekOffset * (previewT / obpm)
-      segDuration = buf.length / buf.sampleRate - seekOffset
+      segOrigStart = nextSegOrigStart + seekOffset * (previewT / obpm) / pf
+      segDuration = (buf.length / buf.sampleRate - seekOffset) / pf
       segEndTime = newStart + segDuration
     }
   }, 50)
@@ -357,14 +397,17 @@ function startProgTimer() {
 }
 function invalidateNextSeg() { nextSegBuffer = null }
 function precomputeNextSegment() {
-  if (!audioBuf || !previewT || Math.abs(previewT / obpm - 1) < 0.01) return Promise.resolve()
+  if (!audioBuf || !previewT) return Promise.resolve()
+  let pf = getPitchFactor()
+  let combinedRatio = getPitchStretchRatio(previewT)
+  if (Math.abs(combinedRatio - 1) < 0.01 && Math.abs(pf - 1) < 0.01) return Promise.resolve()
   // 从 Web Audio 时钟推算原始位置，不能用 $('op').currentTime（它是暂停的）
   let now = actx ? actx.currentTime : 0
   let pos = segOrigStart + (now - pStartTime) * (previewT / obpm)
   let origDur = audioBuf.duration
   let remain = origDur - pos
   if (remain < 1.5) return Promise.resolve()
-  let tgt = previewT, ratio = tgt / obpm, sr = audioBuf.sampleRate
+  let sr = audioBuf.sampleRate
   let isInst = document.querySelector('#am .act').dataset.m === 'inst'
   let segLen = Math.min(audioBuf.length - Math.round(pos * sr), Math.round(isInst ? 15 * sr : 30 * sr))
   if (segLen < 512) return Promise.resolve()
@@ -373,14 +416,15 @@ function precomputeNextSegment() {
     let s = audioBuf.getChannelData(c), d = seg.getChannelData(c)
     for (let j = 0; j < segLen; j++) d[j] = s[Math.round(pos * sr) + j]
   }
+  let useStretch = Math.abs(combinedRatio - 1) >= 0.01
   if (isInst) {
     let ms = midSide(seg)
-    return (Math.abs(ratio - 1) < 0.01 ? Promise.resolve(ms) : timeStretch(ms, ratio)).then(msStretched => {
+    return (useStretch ? timeStretch(ms, combinedRatio) : Promise.resolve(ms)).then(msStretched => {
       nextSegBuffer = fromMidSide(msStretched, parseInt($('vra').value) / 100)
       nextSegOrigStart = pos
     })
   } else {
-    return (Math.abs(ratio - 1) < 0.01 ? Promise.resolve(seg) : timeStretch(seg, ratio)).then(stretched => {
+    return (useStretch ? timeStretch(seg, combinedRatio) : Promise.resolve(seg)).then(stretched => {
       nextSegBuffer = stretched
       nextSegOrigStart = pos
     })
@@ -392,6 +436,8 @@ function playBuffer(buf, origPos) {
   segOrigStart = origPos
   let src = ctx.createBufferSource()
   src.buffer = buf
+  let pf = getPitchFactor()
+  src.playbackRate.value = pf
   let now = ctx.currentTime
   let fade = 0.004
   let gain = ctx.createGain()
@@ -403,7 +449,7 @@ function playBuffer(buf, origPos) {
   previewSrc = src
   curGainNode = gain
   pStartTime = now
-  segDuration = buf.length / buf.sampleRate
+  segDuration = (buf.length / buf.sampleRate) / pf
   segEndTime = now + segDuration
   startLookahead()
   $('upb-btn').textContent = '⏸'
@@ -412,8 +458,9 @@ function playBuffer(buf, origPos) {
 function playbackEnded() {
   // 段播放完毕，检查是否还有剩余音频需要接续
   if (audioBuf && previewT) {
+    let pf = getPitchFactor()
     let tgt = getTargetBPM()
-    if (tgt && Math.abs(tgt / obpm - 1) >= 0.01) {
+    if (tgt && (Math.abs(tgt / obpm - 1) >= 0.01 || Math.abs(pf - 1) >= 0.01)) {
       // 从 Web Audio 时钟推算原始位置
       let origDur = audioBuf.duration
       let curOrigPos = segOrigStart + (actx.currentTime - pStartTime) * (previewT / obpm)
@@ -444,8 +491,13 @@ async function genPreview() {
   try { if (!op.paused) op.pause() } catch(e) {}
   let t = getTargetBPM()
   if (!t || t < 20) return
-  previewT = t; let ratio = t / obpm; segOrigStart = 0
-  if (Math.abs(ratio - 1) < 0.01) { if (origAudioUrl && op.src !== origAudioUrl) { op.src = origAudioUrl }; op.playbackRate = 1; op.play(); $('upb-btn').textContent = '⏸'; startProgTimer(); return }
+  previewT = t
+  let ratio = getPitchStretchRatio(t), pf = getPitchFactor()
+  segOrigStart = 0
+  // If both tempo and pitch are neutral, use native playback
+  if (Math.abs(ratio - 1) < 0.01 && Math.abs(pf - 1) < 0.01) {
+    if (origAudioUrl && op.src !== origAudioUrl) { op.src = origAudioUrl }; op.playbackRate = 1; op.play(); $('upb-btn').textContent = '⏸'; startProgTimer(); return
+  }
   let ctx = getActx(); if (ctx.state === 'suspended') ctx.resume()
   let dur = op.duration, pos = Math.max(0, op.currentTime || 0)
   if (dur > 0 && pos >= dur) { pos = 0; op.currentTime = 0 }
@@ -484,7 +536,7 @@ async function genVPreview() {
   let m = document.querySelector('#sm .act').dataset.m
   let t = m === 'bpm' ? parseInt($('bps').value) : Math.round(obpm * parseInt($('pct').value) / 100)
   if (!t || t < 20) return
-  previewT = t; let ratio = t / obpm
+  previewT = t; let ratio = getPitchStretchRatio(t), pf = getPitchFactor()
   if (ratio < 0.25) ratio = 0.25; if (ratio > 4) ratio = 4
   let sr = audioBuf.sampleRate
   let curPos = op.duration ? op.currentTime : 0
@@ -514,25 +566,30 @@ $('go').onclick = async () => {
   $('go').disabled = true; $('st').classList.add('sh'); $('ra').classList.remove('sh'); pb(0); hideErr()
 
   try {
-    if (typeof lamejs === 'undefined' || !lamejs.Mp3Encoder) { err('MP3 编码库加载失败，请刷新页面重试'); $('go').disabled = false; return }
+    if (typeof lamejs === 'undefined' || !lamejs.Mp3Encoder) {
+      await loadLamejs()
+      if (typeof lamejs === 'undefined' || !lamejs.Mp3Encoder) { err('MP3 编码库加载失败，请检查网络后重试'); $('go').disabled = false; return }
+    }
     actx = getActx()
     let buf = audioBuf
     if (!buf) buf = await actx.decodeAudioData(await file.arrayBuffer())
     pb(5)
     if (document.querySelector('#am .act').dataset.m === 'inst') { buf = removeCenter(buf, parseInt($('vra').value) / 100); pb(7) }
-    stx('原始 BPM：' + obpm + (buf ? ' · ' + (detectSig(buf, obpm) || '4/4') : '')); pb(10)
+    stx('原始 BPM：' + obpm + (buf ? ' · ' + (detectSig(buf, obpm) || '4/4') : '') + (currentPitch !== 0 ? ' · 升降调 ' + (currentPitch > 0 ? '+' : '') + currentPitch + ' 个半音' : '')); pb(10)
 
-    stx('处理 ' + tgt + ' BPM...'); pb(30)
-    let ratio = tgt / obpm
-    if (ratio < 0.25) ratio = 0.25
-    if (ratio > 4) ratio = 4
-    // 分段 timeStretch：避免整文件相位累积误差 + 让进度条可更新
+    stx('处理 ' + tgt + ' BPM' + (currentPitch !== 0 ? ' · 音高偏移 ' + (currentPitch > 0 ? '+' : '') + currentPitch + ' 个半音' : '') + ' 中...'); pb(30)
+    let pf = getPitchFactor()
+    let combinedRatio = (tgt / obpm) / pf
+    if (combinedRatio < 0.25) combinedRatio = 0.25
+    if (combinedRatio > 4) combinedRatio = 4
+    // 分段 timeStretch：combinedRatio = 速度变化 / 音高变化
+    // stretch 后 pitch 不变但时长改变，后续通过重采样实现音高偏移
     let sr = buf.sampleRate, ch = buf.numberOfChannels, srcLen = buf.length
-    let chunkSrcSamples = Math.round(30 * sr)  // 每段取30s源音频
+    let chunkSrcSamples = Math.round(30 * sr)
     let totalChunks = Math.ceil(srcLen / chunkSrcSamples)
-    let totalOutLen = Math.round(srcLen / ratio)
+    let totalOutLen = Math.round(srcLen / combinedRatio)
     let result = actx.createBuffer(ch, totalOutLen, sr)
-    let xfadeSamples = Math.round(0.05 * sr)  // 50ms 交叉淡化
+    let xfadeSamples = Math.round(0.05 * sr)
     for (let i = 0; i < totalChunks; i++) {
       let start = i * chunkSrcSamples
       let len = Math.min(chunkSrcSamples, srcLen - start)
@@ -541,15 +598,14 @@ $('go').onclick = async () => {
         let src = buf.getChannelData(c), dst = chunk.getChannelData(c)
         for (let j = 0; j < len; j++) dst[j] = src[start + j]
       }
-      let stretched = await timeStretch(chunk, ratio)
-      let outStart = Math.round(start / ratio)
+      let stretched = await timeStretch(chunk, combinedRatio)
+      let outStart = Math.round(start / combinedRatio)
       let outLen = stretched.length
       for (let c = 0; c < ch; c++) {
         let src = stretched.getChannelData(c), dst = result.getChannelData(c)
         for (let j = 0; j < outLen && outStart + j < totalOutLen; j++) {
           let pos = outStart + j
           if (i > 0 && j < xfadeSamples) {
-            // 段头交叉淡化：新段淡入，与前段尾部混合
             let fade = j / xfadeSamples
             let prev = dst[pos]
             dst[pos] = prev * (1 - fade) + src[j] * fade
@@ -563,12 +619,30 @@ $('go').onclick = async () => {
     }
     pb(60)
 
+    // Phase 2: resample to restore tempo length and apply pitch shift
+    if (currentPitch !== 0) {
+      stx('音高变换中...'); pb(62)
+      let finalLen = Math.round(srcLen * obpm / tgt)  // tempo-changed length
+      let finalBuf = actx.createBuffer(ch, finalLen, sr)
+      for (let c = 0; c < ch; c++) {
+        let src = result.getChannelData(c), dst = finalBuf.getChannelData(c)
+        for (let i = 0; i < finalLen; i++) {
+          let srcPos = i * pf
+          let idx = Math.floor(srcPos), frac = srcPos - idx
+          let next = Math.min(idx + 1, totalOutLen - 1)
+          dst[i] = src[idx] * (1 - frac) + src[next] * frac
+        }
+      }
+      result = finalBuf
+    }
+
     stx('生成文件...'); pb(85)
     let mp3Parts = toMp3(result)
     let blob = new Blob(mp3Parts, {type:'audio/mp3'})
     let url = URL.createObjectURL(blob)
     let a = document.createElement('a')
-    a.href = url; a.download = bn + '_' + (sm === 'pct' ? $('pct').value + '%' : tgt + 'bpm') + (document.querySelector('#am .act').dataset.m === 'inst' ? '（去人声伴奏）' : '') + '.mp3'; a.click()
+    let pitchSuffix = currentPitch !== 0 ? '_' + (currentPitch > 0 ? '+' : '') + currentPitch + 'key' : ''
+    a.href = url; a.download = bn + '_' + (sm === 'pct' ? $('pct').value + '%' : tgt + 'bpm') + pitchSuffix + (document.querySelector('#am .act').dataset.m === 'inst' ? '（去人声伴奏）' : '') + '.mp3'; a.click()
     URL.revokeObjectURL(url)
     stx('✅ 已保存'); pb(100)
   } catch(e) { err('处理失败: ' + e.message); console.error(e) }
@@ -916,6 +990,41 @@ function updateProgDisplay() {
   let op = $('op')
   if (op.duration) { setProg(op.currentTime / op.duration * 100); $('utm').textContent = fmt(op.currentTime) + ' / ' + fmt(op.duration) }
 }
+
+// ====== Pitch slider ======
+let pitchDragging = false
+$('pt').addEventListener('mousedown', e => { pitchDragging = true; $('pt').classList.add('dragging'); updatePitch(e) })
+document.addEventListener('mousemove', e => { if (pitchDragging) { e.preventDefault(); updatePitch(e) } })
+document.addEventListener('mouseup', () => { if (pitchDragging) { $('pt').classList.remove('dragging'); pitchDragging = false; onPitchChanged() } })
+$('pt').addEventListener('touchstart', e => { pitchDragging = true; $('pt').classList.add('dragging'); updatePitch(e.touches[0]) })
+document.addEventListener('touchmove', e => { if (pitchDragging) { e.preventDefault(); updatePitch(e.touches[0]) } })
+document.addEventListener('touchend', () => { if (pitchDragging) { $('pt').classList.remove('dragging'); pitchDragging = false; onPitchChanged() } })
+function updatePitch(e) {
+  let rect = $('pt').getBoundingClientRect()
+  let pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+  currentPitch = Math.max(-12, Math.min(12, Math.round((pct - 0.5) * 24)))
+  renderPitchUI()
+}
+function renderPitchUI() {
+  let pct = (currentPitch / 24) + 0.5, tw = $('pt').offsetWidth || 300
+  let tp = pct * tw
+  $('pthumb').style.left = tp + 'px'; $('pthumb').style.display = 'block'
+  if (currentPitch < 0) {
+    $('pfl').style.display = 'block'; $('pfl').style.width = (0.5 - pct) * tw + 'px'; $('pfl').style.left = pct * tw + 'px'; $('pfr').style.display = 'none'
+  } else if (currentPitch > 0) {
+    $('pfr').style.display = 'block'; $('pfr').style.width = (pct - 0.5) * tw + 'px'; $('pfr').style.right = (1 - pct) * tw + 'px'; $('pfl').style.display = 'none'
+  } else { $('pfl').style.display = 'none'; $('pfr').style.display = 'none' }
+  let val = $('pv'); val.textContent = currentPitch > 0 ? '+' + currentPitch : currentPitch
+  val.className = 'p-value' + (currentPitch < 0 ? ' down' : currentPitch > 0 ? ' up' : '')
+}
+function onPitchChanged() {
+  if (!$('upb-btn') || $('upb-btn').textContent !== '⏸') return
+  if (document.querySelector('#am .act').dataset.m === 'inst') genVPreview()
+  else genPreview()
+}
+// Init pitch UI
+renderPitchUI()
+
 function unifiedPlay() {
   if (!audioBuf) return
   let b = $('upb-btn'), op = $('op')
@@ -1132,6 +1241,20 @@ function stx(t) { $('stx').textContent = t }
 function pb(p) { $('pbb').style.width = p + '%' }
 function err(m) { $('er').textContent = m; $('er').style.display = 'block' }
 function hideErr() { $('er').style.display = 'none' }
+// 懒加载 lamejs（1.2MB，点导出时才下载）
+function loadLamejs() {
+  return new Promise((resolve, reject) => {
+    if (typeof lamejs !== 'undefined' && lamejs.Mp3Encoder) { resolve(); return }
+    let s = document.createElement('script')
+    s.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js'
+    s.onload = () => { // lamejs 加载后可能需要一瞬间初始化
+      let check = () => { if (typeof lamejs !== 'undefined' && lamejs.Mp3Encoder) resolve(); else setTimeout(check, 50) }
+      check()
+    }
+    s.onerror = () => reject(new Error('lamejs 加载失败'))
+    document.body.appendChild(s)
+  })
+}
 setTimeout(updateSliderDots, 300)
 window.addEventListener('resize', updateSliderDots)
 window.addEventListener('load', updateSliderDots)
